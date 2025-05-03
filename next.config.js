@@ -1,15 +1,25 @@
-// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   compiler: {
-    // 如你使用了 zh-convert，在 SWC 里启用对第三方包的 ES 模块支持
-    styledComponents: true,
+    styledComponents: true // 若你也用了 styled-components
   },
-  // 如果你用到了图片优化、国际化等，也可以在这里补充：
-  // images: { domains: ['your.cdn.com'] },
-  // i18n: { locales: ['zh-CN','zh-TW'], defaultLocale: 'zh-TW' },
+  images: {
+    domains: ['your.cdn.com'] // ✅ 替換成你實際使用的圖檔來源
+  },
+  i18n: {
+    locales: ['zh-TW', 'zh-CN'],
+    defaultLocale: 'zh-TW'
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: '/api/:path*'
+      }
+    ]
+  }
 }
 
 module.exports = nextConfig
