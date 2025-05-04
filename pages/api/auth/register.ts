@@ -1,42 +1,47 @@
 // /pages/api/auth/register.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { prisma } from '@/lib/db';
+import { prisma } from '@/lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST requests are allowed' });
+    return res.status(405).json({ error: 'Only POST requests allowed' });
   }
 
-  const { email, phone } = req.body;
+  const { phone, name, referralCode } = req.body;
 
-  if (!email || !phone) {
-    return res.status(400).json({ error: 'Missing email or phone number' });
+  if (!phone || !name) {
+    return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { phone },
-        ]
-      }
-    });
-
+    const existingUser = await prisma.user.findUnique({ where: { phone } });
     if (existingUser) {
-      return res.status(409).json({ error: 'User already exists with this email or phone' });
+      return res.status(400).json({ error: 'User already exists' });
     }
 
     const newUser = await prisma.user.create({
       data: {
-        email,
         phone,
+        name,
+        credits: 25, // 首充送 25 點
+        referredBy: referralCode || null,
       },
     });
 
-    return res.status(200).json({ message: 'User registered successfully', user: newUser });
-  } catch (error: any) {
-    console.error('[Register Error]', error);
-    return res.status(500).json({ error: 'Registration failed' });
+    // 若填入推薦碼，查詢推薦人並加點
+    if (referralCode) {
+      const referrer = await prisma.user.findUnique({ where: { referralCode } });
+      if (referrer) {
+        await prisma.user.update({
+          where: { id: referrer.id },
+          data: { credits: { increment: 25 } },
+        });
+      }
+    }
+
+    return res.status(201).json({ message: '註冊成功', user: newUser });
+  } catch (err) {
+    console.error('[Register Error]', err);
+    return res.status(500).json({ error: '註冊失敗' });
   }
 }
