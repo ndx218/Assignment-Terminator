@@ -1,4 +1,5 @@
-// API: generate draftimport type { NextApiRequest, NextApiResponse } from 'next';
+// API: generate draft
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
