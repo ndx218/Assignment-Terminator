@@ -13,6 +13,46 @@ model User {
   id        String   @id @default(cuid())
   email     String?  @unique
   phone     String?  @unique
+  credits   Int      @default(0)               // 用戶點數
+  referrer  User?     @relation("Referral", fields: [referrerId], references: [id])
+  referrerId String?  // 被誰推薦
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  sessions     Session[]
+  transactions Transaction[]
+  referrals    Referral[] @relation("Referral")
+}
+
+model VerificationCode {
+  phone     String   @id
+  code      String
+  createdAt DateTime
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+}
+
+model Transaction {
+  id         String   @id @default(cuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  amount     Float
+  isFirstTopUp Boolean @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model Referral {
+  id         String   @id @default(cuid())
+  referrer   User     @relation("Referral", fields: [referrerId], references: [id])
+  referrerId String
+  referee    User     @relation(fields: [refereeId], references: [id])
+  refereeId  String
+  rewarded   Boolean  @default(false)
+  createdAt  DateTime @default(now())
 }
