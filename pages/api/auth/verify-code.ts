@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const CODE_EXPIRY_MINUTES = 10;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -15,30 +16,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const record = await prisma.verificationCode.findUnique({
-      where: { phone },
-    });
+    const record = await prisma.verificationCode.findUnique({ where: { phone } });
 
     if (!record) {
-      return res.status(400).json({ error: '驗證碼不存在，請重新獲取' });
+      return res.status(400).json({ error: '未找到驗證碼，請重新獲取' });
     }
 
     const now = new Date();
-    const expired = new Date(record.createdAt);
-    expired.setMinutes(expired.getMinutes() + 10); // 驗證碼 10 分鐘有效
+    const expiry = new Date(record.createdAt);
+    expiry.setMinutes(expiry.getMinutes() + CODE_EXPIRY_MINUTES);
+
+    if (now > expiry) {
+      return res.status(400).json({ error: '驗證碼已過期，請重新獲取' });
+    }
 
     if (record.code !== code) {
       return res.status(400).json({ error: '驗證碼錯誤' });
     }
 
-    if (now > expired) {
-      return res.status(400).json({ error: '驗證碼已過期，請重新獲取' });
-    }
+    // 驗證成功後，清除驗證碼（選擇性）
+    await prisma.verificationCode.delete({ where: { phone } });
 
-    // 通過驗證，接下來可以登入或綁定帳戶
+    // TODO: 可以在這裡建立或登入使用者
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error('❌ 驗證錯誤：', err);
-    return res.status(500).json({ error: '伺服器錯誤' });
+    console.error('❌ 驗證碼處理失敗：', err);
+    return res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
   }
 }
