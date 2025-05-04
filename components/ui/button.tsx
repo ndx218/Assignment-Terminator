@@ -1,4 +1,5 @@
-// UI button componentimport { cn } from '@/lib/utils';
+// UI button component
+import { cn } from '@/lib/utils';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
