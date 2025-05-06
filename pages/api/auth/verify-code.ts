@@ -1,6 +1,3 @@
-// 👇 解決 Vercel 無法找到 cookie type 的錯誤
-declare module 'cookie';
-
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { nanoid } from 'nanoid';
@@ -39,23 +36,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: '驗證碼錯誤' });
     }
 
-    // 驗證成功後刪除驗證碼紀錄
     await prisma.verificationCode.delete({ where: { phone } });
 
-    // 檢查用戶是否已存在
     let user = await prisma.user.findUnique({ where: { phone } });
 
-    // 若無帳戶則自動註冊
     if (!user) {
       user = await prisma.user.create({
         data: {
           phone,
-          credits: 25, // 首次註冊送點
+          credits: 25,
         },
       });
     }
 
-    // 建立 Session Token（簡易版）
     const sessionToken = nanoid();
     await prisma.session.create({
       data: {
@@ -65,11 +58,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // 設定 cookie
     res.setHeader('Set-Cookie', serialize('session-token', sessionToken, {
       path: '/',
       httpOnly: true,
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: 60 * 60 * 24 * 7,
     }));
 
     return res.status(200).json({ success: true, user });
