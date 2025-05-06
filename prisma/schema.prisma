@@ -8,17 +8,18 @@ generator client {
 }
 
 model User {
-  id         String    @id @default(cuid())
-  name       String?   // ✅ 使用者名稱（可選）
-  email      String?   @unique
-  phone      String?   @unique
-  credits    Int       @default(0)
-  referredBy String?   // ✅ 來自哪個邀請碼（可選）
+  id           String    @id @default(cuid())
+  name         String?   // 使用者名稱（可選）
+  email        String?   @unique
+  phone        String?   @unique
+  credits      Int       @default(0)
+  referredBy   String?   // 被哪個人推薦（推薦者的 referralCode）
+  referralCode String?   @unique // 自己的推薦碼 ✅
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  sessions   Session[] // 反向關聯
+  sessions     Session[]
 }
 
 model Session {
