@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^6.7.0",
     "@radix-ui/react-slot": "^1.0.2",
     "next": "13.4.12",
     "next-auth": "^4.22.1",
@@ -20,6 +22,7 @@
     "zh-convert": "1.0.1"
   },
   "devDependencies": {
+    "prisma": "^6.7.0",
     "@types/node": "20.4.2",
     "@types/react": "18.2.14",
     "@types/react-dom": "18.2.6",
