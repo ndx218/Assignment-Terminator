@@ -1,6 +1,7 @@
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
+    "name" TEXT,
     "email" TEXT,
     "phone" TEXT,
     "credits" INTEGER NOT NULL DEFAULT 0,
@@ -39,4 +40,7 @@ CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
 CREATE UNIQUE INDEX "Session_token_key" ON "Session"("token");
 
 -- AddForeignKey
-ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Session"
+ADD CONSTRAINT "Session_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "User"("id")
+ON DELETE RESTRICT ON UPDATE CASCADE;
