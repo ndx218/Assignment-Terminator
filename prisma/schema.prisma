@@ -9,13 +9,14 @@ generator client {
 
 model User {
   id        String    @id @default(cuid())
+  name      String?   // ✅ 新增 name 欄位，與前端一致
   email     String?   @unique
   phone     String?   @unique
   credits   Int       @default(0)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  sessions  Session[] // 反向關聯：一個使用者有多個 session
+  sessions  Session[] // 一個使用者對多個 sessions
 }
 
 model Session {
