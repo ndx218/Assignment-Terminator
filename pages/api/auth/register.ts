@@ -1,4 +1,3 @@
-// /pages/api/auth/register.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/lib/prisma';
 
@@ -9,8 +8,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { phone, name, referralCode } = req.body;
 
-  if (!phone || !name) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  if (!phone || !name || typeof phone !== 'string' || typeof name !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid required fields' });
   }
 
   try {
@@ -23,12 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         phone,
         name,
-        credits: 25, // 首充送 25 點
+        credits: 25,
         referredBy: referralCode || null,
       },
     });
 
-    // 若填入推薦碼，查詢推薦人並加點
     if (referralCode) {
       const referrer = await prisma.user.findUnique({ where: { referralCode } });
       if (referrer) {
