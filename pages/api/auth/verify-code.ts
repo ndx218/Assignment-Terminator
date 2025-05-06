@@ -1,3 +1,6 @@
+// 👇 解決 Vercel 無法找到 cookie type 的錯誤
+declare module 'cookie';
+
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { nanoid } from 'nanoid';
@@ -47,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       user = await prisma.user.create({
         data: {
           phone,
-          credits: 25, // 首次註冊送點（可調整）
+          credits: 25, // 首次註冊送點
         },
       });
     }
