@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { nanoid } from 'nanoid';
-import { serialize } from 'cookie';
+// ❗ 改為 require，避免 TS 編譯錯誤
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { serialize } = require('cookie');
 
 const prisma = new PrismaClient();
 const CODE_EXPIRY_MINUTES = 10;
@@ -61,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Set-Cookie', serialize('session-token', sessionToken, {
       path: '/',
       httpOnly: true,
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 7, // 1 week
     }));
 
     return res.status(200).json({ success: true, user });
