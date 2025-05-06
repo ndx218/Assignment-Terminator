@@ -8,14 +8,14 @@ generator client {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  email     String?   @unique
-  phone     String?   @unique
-  credits   Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  phone     String?  @unique
+  credits   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sessions  Session[] // ✅ 加這一行：反向關聯
+  sessions Session[] // ✅ 加這一行：反向關聯
 }
 
 model Session {
