@@ -8,15 +8,17 @@ generator client {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  name      String?   // ✅ 新增 name 欄位，與前端一致
-  email     String?   @unique
-  phone     String?   @unique
-  credits   Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  name       String?   // ✅ 使用者名稱（可選）
+  email      String?   @unique
+  phone      String?   @unique
+  credits    Int       @default(0)
+  referredBy String?   // ✅ 來自哪個邀請碼（可選）
 
-  sessions  Session[] // 一個使用者對多個 sessions
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  sessions   Session[] // 反向關聯
 }
 
 model Session {
