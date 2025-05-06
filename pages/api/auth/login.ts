@@ -34,7 +34,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 模擬產生一個 JWT token（這裡請換成你真正的 JWT 實作）
     const fakeJwt = Buffer.from(`${user.id}:${user.phone}`).toString('base64');
 
-    return res.status(200).json({ token: fakeJwt, user: { id: user.id, name: user.name, phone: user.phone, credits: user.credits } });
+    return res.status(200).json({
+      token: fakeJwt,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        credits: user.credits,
+      },
+    });
   } catch (err) {
     console.error('[Login Error]', err);
     return res.status(500).json({ error: '登入失敗' });
