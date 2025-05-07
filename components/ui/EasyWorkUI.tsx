@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import Textarea from '@/components/ui/textarea'; // ✅ 正確用法：default import
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useLang, toSimplified, toTraditional } from '@/lib/lang';
