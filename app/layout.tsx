@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import Sidebar from '@/components/SidebarWrapper';
+import SidebarWrapper from '@/components/SidebarWrapper';
 import { Menu } from 'lucide-react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -21,8 +21,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* 側邊欄會用 SidebarWrapper 控制，包含漢堡按鈕 */}
-      <Sidebar />
+      {/* ✅ SidebarWrapper 控制側欄與漢堡按鈕 */}
+      <SidebarWrapper />
 
       {/* 主畫面 */}
       <div className="flex-1 flex flex-col">
