@@ -1,15 +1,24 @@
-// components/ui/textarea.tsx
+import { Textarea } from '@/components/ui/textarea';
 
-import React, { TextareaHTMLAttributes } from 'react';
-import { cn } from '@/lib/utils';
-
-interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  className?: string;
+export default function OutlineSection({
+  outline,
+  setOutline,
+}: {
+  outline: string;
+  setOutline: (value: string) => void;
+}) {
+  return (
+    <div className="border rounded-lg p-4">
+      <label className="font-bold flex items-center gap-2 mb-2 text-lg">
+        📝 段落大綱：
+      </label>
+      <Textarea
+        rows={6} // 預設顯示較高輸入區
+        placeholder="請輸入段落大綱"
+        value={outline}
+        onChange={(e) => setOutline(e.target.value)}
+        className="w-full"
+      />
+    </div>
+  );
 }
-
-export const Textarea = ({ className = '', ...props }: TextareaProps) => (
-  <textarea
-    className={cn(`border px-2 py-1 rounded ${className}`)}
-    {...props}
-  />
-);
