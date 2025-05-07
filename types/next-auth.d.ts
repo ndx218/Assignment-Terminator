@@ -1,26 +1,30 @@
-// types/next-auth.d.ts
+// ✅ types/next-auth.d.ts
+import NextAuth from 'next-auth';
 
-declare module "next-auth" {
+// 擴展 next-auth 中的 User 和 Session 型別
+declare module 'next-auth' {
   interface User {
     id: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
     phone?: string | null;
     referredBy?: string | null;
-    referralCode?: string | null;
   }
 
   interface Session {
-    user: User;
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      phone?: string | null;
+      referredBy?: string | null;
+    };
   }
 }
 
-declare module "next-auth/jwt" {
+// 擴展 JWT token 型別
+declare module 'next-auth/jwt' {
   interface JWT {
-    id: string;
     phone?: string | null;
     referredBy?: string | null;
-    referralCode?: string | null;
   }
 }
