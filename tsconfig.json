@@ -18,8 +18,13 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "typeRoots": ["types", "node_modules/@types"] // ✅ 加這行
+    "typeRoots": ["types", "node_modules/@types"]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "types/**/*.d.ts"     // ✅ 加這行！
+  ],
   "exclude": ["node_modules"]
 }
