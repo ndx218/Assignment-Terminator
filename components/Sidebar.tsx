@@ -4,21 +4,20 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React from 'react';
 import { useSession } from 'next-auth/react';
+import { Session } from 'next-auth'; // ✅ 引入擴展後的 Session 型別
 import ReferralCodeForm from './ReferralCodeForm';
 
 export default function Sidebar() {
   const router = useRouter();
   const { data: session } = useSession();
-  const isActive = (path: string) => router.pathname === path;
+  const user = session?.user as Session["user"]; // ✅ 類型明確化以支援 referredBy
 
-  const user = session?.user;
+  const isActive = (path: string) => router.pathname === path;
 
   return (
     <aside className="w-64 min-h-screen bg-gray-100 p-4 flex flex-col justify-between">
       <div>
         <h1 className="text-xl font-bold mb-6">📚 Assignment Terminator</h1>
-
-        {/* ✅ 正確的 <nav> 元素 */}
         <nav className="space-y-3 mb-8">
           <Link href="/">
             <span
@@ -60,6 +59,7 @@ export default function Sidebar() {
           )}
         </nav>
 
+        {/* ✅ 額外推薦碼輸入欄位 */}
         {user && !user.referredBy && (
           <div className="mt-6">
             <h2 className="text-sm font-medium text-gray-700 mb-2">輸入推薦碼</h2>
