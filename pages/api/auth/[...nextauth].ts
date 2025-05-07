@@ -1,38 +1,8 @@
-import type { NextAuthOptions, Session } from 'next-auth';
-import GitHubProvider from 'next-auth/providers/github';
-import type { JWT } from 'next-auth/jwt';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import GitHubProvider from 'next-auth/providers/github';
 import { prisma } from '@/lib/prisma';
-
-// ✅ 型別擴充：一次完整定義 user、session、jwt
-declare module 'next-auth' {
-  interface User {
-    id: string;
-    phone?: string | null;
-    referredBy?: string | null;
-    referralCode?: string | null;
-  }
-
-  interface Session {
-    user: {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-      phone?: string | null;
-      referredBy?: string | null;
-      referralCode?: string | null;
-    };
-  }
-}
-
-declare module 'next-auth/jwt' {
-  interface JWT {
-    phone?: string | null;
-    referredBy?: string | null;
-    referralCode?: string | null;
-  }
-}
+import type { NextAuthOptions } from 'next-auth';
+import type { JWT } from 'next-auth/jwt';
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -40,16 +10,9 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.GITHUB_ID || '',
       clientSecret: process.env.GITHUB_SECRET || '',
     }),
-    // 如要改成 Email 登入可加：
-    // EmailProvider({
-    //   server: process.env.EMAIL_SERVER,
-    //   from: process.env.EMAIL_FROM,
-    // }),
   ],
-
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
-
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -60,8 +23,7 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
-
-    async session({ session, token }: { session: Session; token: JWT }) {
+    async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
         session.user.phone = token.phone ?? null;
@@ -70,7 +32,6 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
-
     async signIn({ user }) {
       const dbUser = await prisma.user.findUnique({
         where: { email: user.email ?? undefined },
