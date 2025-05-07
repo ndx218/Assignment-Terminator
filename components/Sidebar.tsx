@@ -1,78 +1,86 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/router';
-import React from 'react';
-import { useSession } from 'next-auth/react';
-import { Session } from 'next-auth'; // ✅ 引入擴展後的 Session 型別
-import ReferralCodeForm from './ReferralCodeForm';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import {
+  Home,
+  Wallet,
+  HelpCircle,
+  User,
+  Settings,
+  LogOut,
+} from 'lucide-react';
 
 export default function Sidebar() {
-  const router = useRouter();
-  const { data: session } = useSession();
-  const user = session?.user as Session["user"]; // ✅ 類型明確化以支援 referredBy
+  const pathname = usePathname();
 
-  const isActive = (path: string) => router.pathname === path;
+  const mainMenu = [
+    { label: '作業產生器', href: '/', icon: Home },
+    { label: '點數充值', href: '/recharge', icon: Wallet },
+    { label: '常見問題', href: '/help', icon: HelpCircle },
+  ];
+
+  const userMenu = [
+    { label: '個人中心', href: '/profile', icon: User },
+    { label: '設定', href: '/settings', icon: Settings },
+    { label: '登出', href: '/logout', icon: LogOut },
+  ];
 
   return (
-    <aside className="w-64 min-h-screen bg-gray-100 p-4 flex flex-col justify-between">
-      <div>
-        <h1 className="text-xl font-bold mb-6">📚 Assignment Terminator</h1>
-        <nav className="space-y-3 mb-8">
-          <Link href="/">
-            <span
-              className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
-                isActive('/') ? 'bg-gray-300 font-semibold' : ''
-              }`}
-            >
-              📝 作業產生器
-            </span>
-          </Link>
-          <Link href="/recharge">
-            <span
-              className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
-                isActive('/recharge') ? 'bg-gray-300 font-semibold' : ''
-              }`}
-            >
-              💳 點數充值
-            </span>
-          </Link>
-          <Link href="/help">
-            <span
-              className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
-                isActive('/help') ? 'bg-gray-300 font-semibold' : ''
-              }`}
-            >
-              ❓ 常見問題
-            </span>
-          </Link>
-          {user && (
-            <Link href="/admin">
-              <span
-                className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
-                  isActive('/admin') ? 'bg-gray-300 font-semibold' : ''
-                }`}
-              >
-                👑 管理介面
-              </span>
-            </Link>
-          )}
-        </nav>
-
-        {/* ✅ 額外推薦碼輸入欄位 */}
-        {user && !user.referredBy && (
-          <div className="mt-6">
-            <h2 className="text-sm font-medium text-gray-700 mb-2">輸入推薦碼</h2>
-            <ReferralCodeForm userId={user.id} referredBy={user.referredBy} />
-          </div>
-        )}
+    <aside className="h-screen w-[240px] bg-black text-white flex flex-col pt-4">
+      {/* Logo */}
+      <div className="px-6 mb-6">
+        <h1 className="text-2xl font-bold leading-tight">
+          📚 Assignment<br />Terminator
+        </h1>
       </div>
 
-      {user && (
-        <div className="text-sm text-gray-500">
-          登入帳戶：<span className="font-medium">{user.email || user.phone}</span>
-        </div>
-      )}
+      {/* 主選單 */}
+      <nav className="flex flex-col gap-1 px-2">
+        {mainMenu.map((item) => {
+          const isActive = pathname === item.href;
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                'flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-800',
+                isActive && 'bg-gray-800'
+              )}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-sm">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* 分隔線 */}
+      <hr className="my-4 border-gray-700 mx-4" />
+
+      {/* 額外功能選單 */}
+      <nav className="flex flex-col gap-1 px-2">
+        {userMenu.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-800"
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-sm">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className="mt-auto text-xs text-gray-500 px-4 py-3">
+        © 2025 ChakFung
+      </div>
     </aside>
   );
 }
