@@ -7,8 +7,6 @@ import {
   Home,
   Wallet,
   HelpCircle,
-  User,
-  Settings,
   LogOut,
   X,
   Menu,
@@ -20,24 +18,21 @@ export default function SidebarWrapper() {
 
   return (
     <>
-      {/* 漢堡選單按鈕 */}
+      {/* 🟡 漢堡選單按鈕（手機＋桌面都顯示） */}
       <button
-        onClick={() => setOpen(!open)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-white border shadow-md md:hidden"
+        onClick={() => setOpen(true)}
+        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-white border shadow-md"
         aria-label="開啟選單"
       >
         <Menu className="w-5 h-5 text-black" />
       </button>
 
-      {/* 側邊欄 */}
+      {/* 🟢 側邊欄（手機與桌面都要點選才出現） */}
       {open && (
-        <Sidebar onClose={() => setOpen(false)} />
+        <div className="fixed inset-0 z-40 bg-black bg-opacity-20" onClick={() => setOpen(false)}>
+          <Sidebar onClose={() => setOpen(false)} />
+        </div>
       )}
-
-      {/* 桌面版固定顯示 */}
-      <div className="hidden md:block">
-        <Sidebar />
-      </div>
     </>
   );
 }
@@ -51,15 +46,12 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
     { label: '常見問題', href: '/help', icon: HelpCircle },
   ];
 
-  const userMenu = [
-    { label: '個人中心', href: '/profile', icon: User },
-    { label: '設定', href: '/settings', icon: Settings },
-    { label: '登出', href: '/logout', icon: LogOut },
-  ];
-
   return (
-    <aside className="h-screen w-[240px] bg-white text-black flex flex-col pt-4 fixed z-40 md:relative shadow-md">
-      {/* Logo & Close */}
+    <aside
+      className="h-screen w-[240px] bg-white text-black flex flex-col pt-4 fixed z-50 shadow-md"
+      onClick={(e) => e.stopPropagation()} // 防止點擊背景也關掉
+    >
+      {/* Logo + 關閉按鈕 */}
       <div className="px-6 mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold leading-tight">
           📚 Assignment<br />Terminator
@@ -67,7 +59,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         {onClose && (
           <button
             onClick={onClose}
-            className="md:hidden text-gray-500 hover:text-black"
+            className="text-gray-500 hover:text-black"
             aria-label="關閉側欄"
           >
             <X className="w-5 h-5" />
@@ -99,23 +91,19 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
       <hr className="my-4 border-gray-300 mx-4" />
 
+      {/* 登出 */}
       <nav className="flex flex-col gap-1 px-2">
-        {userMenu.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-100"
-              onClick={onClose}
-            >
-              <Icon className="w-5 h-5" />
-              <span className="text-sm">{item.label}</span>
-            </Link>
-          );
-        })}
+        <Link
+          href="/logout"
+          className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-100"
+          onClick={onClose}
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="text-sm">登出</span>
+        </Link>
       </nav>
 
+      {/* 底部 */}
       <div className="mt-auto text-xs text-gray-400 px-4 py-3">
         © 2025 ChakFung
       </div>
