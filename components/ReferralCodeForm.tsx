@@ -7,12 +7,13 @@ import { toast } from 'sonner';
 
 interface ReferralCodeFormProps {
   userId: string;
-  disabled?: boolean;
+  referredBy?: string | null; // 判斷是否已填推薦碼
 }
 
-export default function ReferralCodeForm({ userId, disabled }: ReferralCodeFormProps) {
+export default function ReferralCodeForm({ userId, referredBy }: ReferralCodeFormProps) {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [applied, setApplied] = useState(!!referredBy); // 預設為是否已填
 
   const handleApply = async () => {
     if (!code.trim()) {
@@ -31,6 +32,7 @@ export default function ReferralCodeForm({ userId, disabled }: ReferralCodeFormP
       const data = await res.json();
       if (res.ok) {
         toast.success('推薦碼已成功綁定！');
+        setApplied(true);
       } else {
         toast.error(data.error || '綁定失敗');
       }
@@ -41,16 +43,20 @@ export default function ReferralCodeForm({ userId, disabled }: ReferralCodeFormP
     }
   };
 
+  if (applied) {
+    return <p className="text-sm text-muted-foreground">您已填寫推薦碼，無法再次修改。</p>;
+  }
+
   return (
     <div className="flex items-center gap-2">
       <Input
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder="輸入推薦碼"
-        disabled={disabled || isSubmitting}
+        disabled={isSubmitting}
         className="w-[180px]"
       />
-      <Button onClick={handleApply} isLoading={isSubmitting} disabled={disabled}>
+      <Button onClick={handleApply} isLoading={isSubmitting}>
         使用推薦碼
       </Button>
     </div>
