@@ -8,20 +8,21 @@ generator client {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  name         String?   // 使用者名稱（可選）
-  email        String?   @unique
-  phone        String?   @unique
-  credits      Int       @default(0)
-  referredBy   String?   // 被哪個人推薦（推薦者的 referralCode）
-  referralCode String?   @unique // 自己的推薦碼 ✅
+  id             String      @id @default(cuid())
+  name           String?     
+  email          String?     @unique
+  phone          String?     @unique
+  credits        Int         @default(0)
+  referredBy     String?     
+  referralCode   String?     @unique
 
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   sessions       Session[]
-  referralsMade  Referral[] @relation("Referrer")  // 我推薦別人
-  referralsGot   Referral[] @relation("Referee")   // 別人推薦我
+  referralsMade  Referral[]  @relation("Referrer")
+  referralsGot   Referral[]  @relation("Referee")
+  transactions   Transaction[]
 }
 
 model Session {
@@ -47,4 +48,13 @@ model Referral {
 
   referrer    User     @relation("Referrer", fields: [referrerId], references: [id])
   referee     User     @relation("Referee", fields: [refereeId], references: [id])
+}
+
+model Transaction {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  amount       Int
+  isFirstTopUp Boolean  @default(false)
+  createdAt    DateTime @default(now())
 }
