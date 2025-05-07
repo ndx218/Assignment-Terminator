@@ -1,4 +1,4 @@
-// ✅ 強化修正版：/pages/api/redeem-referral.ts
+// ✅ /pages/api/redeem-referral.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/lib/prisma';
 
@@ -8,7 +8,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { userId } = req.body;
-
   if (!userId || typeof userId !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid userId' });
   }
@@ -17,7 +16,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // ⚠ 修正這裡：你只有 referredBy，沒有 referrerId
     const referrerCode = user.referredBy;
     if (!referrerCode) {
       return res.status(400).json({ error: 'No referrer linked' });
@@ -30,27 +28,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ error: 'Referrer not found' });
     }
 
-    // 檢查是否已領取推薦獎勵
     const alreadyRewarded = await prisma.referral.findFirst({
-      where: { refereeId: userId, rewarded: true },
+      where: {
+        refereeId: userId,
+        rewarded: true,
+      },
     });
     if (alreadyRewarded) {
       return res.status(400).json({ error: 'Referral reward already claimed' });
     }
 
-    // 檢查是否有符合條件的首充紀錄
-    const topup = await prisma.transaction.findFirst({
+    const eligibleTopup = await prisma.transaction.findFirst({
       where: {
         userId,
-        amount: { gte: 10 },
         isFirstTopUp: true,
+        amount: { gte: 10 },
       },
     });
-    if (!topup) {
+    if (!eligibleTopup) {
       return res.status(400).json({ error: 'No eligible first top-up found' });
     }
 
-    // ✅ 發放推薦獎勵並記錄
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
@@ -71,8 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ]);
 
     return res.status(200).json({ success: true, message: 'Referral bonus granted' });
-  } catch (err) {
-    console.error('[Referral Error]', err);
+  } catch (error) {
+    console.error('[Referral Error]', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
