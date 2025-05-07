@@ -16,7 +16,7 @@ declare module 'next-auth' {
       image?: string | null;
       phone?: string | null;
       referredBy?: string | null;
-      referralCode?: string | null;
+      referralCode?: string | null; // ✅ 這行是你缺的！
     };
   }
 }
