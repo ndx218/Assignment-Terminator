@@ -30,5 +30,6 @@ export function usePointStore() {
     hasEnough,
     deduct,
     add,
+    setPoints: updatePoints, // ✅ 額外暴露出來
   };
 }
