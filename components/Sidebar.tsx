@@ -3,41 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import {
-  Home,
-  Wallet,
-  HelpCircle,
-  LogOut,
-  X,
-  Menu,
-} from 'lucide-react';
-import { useState } from 'react';
+import { Home, Wallet, HelpCircle, LogOut, X } from 'lucide-react';
 
-export default function SidebarWrapper() {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      {/* 🟡 漢堡選單按鈕（手機＋桌面都顯示） */}
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-white border shadow-md"
-        aria-label="開啟選單"
-      >
-        <Menu className="w-5 h-5 text-black" />
-      </button>
-
-      {/* 🟢 側邊欄（手機與桌面都要點選才出現） */}
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black bg-opacity-20" onClick={() => setOpen(false)}>
-          <Sidebar onClose={() => setOpen(false)} />
-        </div>
-      )}
-    </>
-  );
-}
-
-function Sidebar({ onClose }: { onClose?: () => void }) {
+export default function Sidebar({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname();
 
   const mainMenu = [
@@ -48,10 +16,10 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
   return (
     <aside
-      className="h-screen w-[240px] bg-white text-black flex flex-col pt-4 fixed z-50 shadow-md"
-      onClick={(e) => e.stopPropagation()} // 防止點擊背景也關掉
+      className="h-screen w-[240px] bg-white text-black flex flex-col pt-4 fixed md:static z-50 shadow-md"
+      onClick={(e) => e.stopPropagation()} // 防止點擊遮罩也關閉
     >
-      {/* Logo + 關閉按鈕 */}
+      {/* Logo + 關閉（手機才顯示） */}
       <div className="px-6 mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold leading-tight">
           📚 Assignment<br />Terminator
@@ -59,7 +27,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-black"
+            className="md:hidden text-gray-500 hover:text-black"
             aria-label="關閉側欄"
           >
             <X className="w-5 h-5" />
@@ -103,7 +71,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         </Link>
       </nav>
 
-      {/* 底部 */}
+      {/* 底部版權文字 */}
       <div className="mt-auto text-xs text-gray-400 px-4 py-3">
         © 2025 ChakFung
       </div>
