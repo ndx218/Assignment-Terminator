@@ -17,7 +17,9 @@ export default function Sidebar() {
     <aside className="w-64 min-h-screen bg-gray-100 p-4 flex flex-col justify-between">
       <div>
         <h1 className="text-xl font-bold mb-6">📚 Assignment Terminator</h1>
-        <na className="space-y-3 mb-8">
+
+        {/* ✅ 正確的 <nav> 元素 */}
+        <nav className="space-y-3 mb-8">
           <Link href="/">
             <span
               className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
@@ -29,7 +31,7 @@ export default function Sidebar() {
           </Link>
           <Link href="/recharge">
             <span
-              className={`block px-4 py-2 rounded hover:bg-gra-200 cursor-pointer ${
+              className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
                 isActive('/recharge') ? 'bg-gray-300 font-semibold' : ''
               }`}
             >
@@ -48,7 +50,7 @@ export default function Sidebar() {
           {user && (
             <Link href="/admin">
               <span
-                className={`block px-4 py2 rounded hover:bg-gray-200 cursor-pointer ${
+                className={`block px-4 py-2 rounded hover:bg-gray-200 cursor-pointer ${
                   isActive('/admin') ? 'bg-gray-300 font-semibold' : ''
                 }`}
               >
