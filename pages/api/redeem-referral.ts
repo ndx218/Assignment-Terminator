@@ -1,10 +1,9 @@
-// ✅ /pages/api/redeem-referral.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@/lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST allowed' });
+    return res.status(405).json({ error: 'Only POST method allowed' });
   }
 
   const { userId } = req.body;
@@ -14,18 +13,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const referrerCode = user.referredBy;
     if (!referrerCode) {
-      return res.status(400).json({ error: 'No referrer linked' });
+      return res.status(400).json({ error: 'No referral code linked to this user' });
     }
 
     const referrer = await prisma.user.findUnique({
       where: { referralCode: referrerCode },
     });
     if (!referrer) {
-      return res.status(404).json({ error: 'Referrer not found' });
+      return res.status(404).json({ error: 'Referrer user not found' });
     }
 
     const alreadyRewarded = await prisma.referral.findFirst({
@@ -46,9 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
     if (!eligibleTopup) {
-      return res.status(400).json({ error: 'No eligible first top-up found' });
+      return res.status(400).json({ error: 'No eligible first top-up of $10+ found' });
     }
 
+    // ✅ 發放推薦獎勵並建立記錄
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
