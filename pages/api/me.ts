@@ -6,7 +6,6 @@ import { getTokenFromCookie } from '@/lib/auth-utils';
 const prisma = new PrismaClient();
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // 修正：處理 cookie 可能為 undefined 的情況
   const cookieHeader = req.headers.cookie || '';
   const token = getTokenFromCookie(cookieHeader);
 
