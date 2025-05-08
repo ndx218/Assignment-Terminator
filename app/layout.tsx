@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import SidebarWrapper from '@/components/SidebarWrapper';
-import { Menu } from 'lucide-react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
@@ -20,12 +19,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userName = session?.user?.name || '訪客';
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* ✅ SidebarWrapper 控制側欄與漢堡按鈕 */}
+    <>
+      {/* ✅ Sidebar 和漢堡按鈕，固定在畫面最上層 */}
       <SidebarWrapper />
 
-      {/* 主畫面 */}
-      <div className="flex-1 flex flex-col">
+      {/* 主畫面（保留空間） */}
+      <div className="md:pl-[240px] flex flex-col min-h-screen bg-gray-50">
         {/* 頂部欄：包含用戶資料顯示 */}
         <header className="p-3 bg-white shadow flex justify-end items-center">
           <div className="text-sm text-gray-700">
@@ -38,6 +37,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-    </div>
+    </>
   );
 }
