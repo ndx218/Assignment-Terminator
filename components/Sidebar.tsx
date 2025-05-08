@@ -16,10 +16,13 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
 
   return (
     <aside
-      className="h-screen w-[240px] bg-white text-black flex flex-col pt-4 fixed left-0 top-0 z-50 shadow-md"
-      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        'h-screen w-[240px] bg-white text-black flex flex-col pt-4 shadow-md z-50',
+        onClose ? 'fixed left-0 top-0' : 'hidden md:flex md:fixed md:left-0 md:top-0'
+      )}
+      onClick={(e) => e.stopPropagation()} // 防止浮出模式被遮罩點擊關閉
     >
-      {/* Logo + 關閉（有傳 onClose 才顯示） */}
+      {/* Logo + 關閉按鈕（只在手機浮出時顯示） */}
       <div className="px-6 mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold leading-tight">
           📚 Assignment<br />Terminator
@@ -27,7 +30,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-black"
+            className="text-gray-500 hover:text-black md:hidden"
             aria-label="關閉側欄"
           >
             <X className="w-5 h-5" />
@@ -71,6 +74,7 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         </Link>
       </nav>
 
+      {/* 底部版權資訊 */}
       <div className="mt-auto text-xs text-gray-400 px-4 py-3">
         © 2025 ChakFung
       </div>
