@@ -18,7 +18,7 @@ export default function SidebarWrapper() {
         <Menu className="w-5 h-5 text-black" />
       </button>
 
-      {/* 📱/🖥️ 全裝置使用浮出式側欄 */}
+      {/* 📱/🖥️ 浮出側欄（含遮罩） */}
       {open && (
         <div
           className="fixed inset-0 bg-black bg-opacity-30 z-40"
