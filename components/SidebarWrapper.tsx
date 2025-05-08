@@ -18,14 +18,20 @@ export default function SidebarWrapper() {
         <Menu className="w-5 h-5 text-black" />
       </button>
 
-      {/* 📱/🖥️ 浮出側欄（含遮罩） */}
+      {/* 📱/🖥️ 側欄浮出 */}
       {open && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-30 z-40"
-          onClick={() => setOpen(false)}
-        >
-          <Sidebar onClose={() => setOpen(false)} />
-        </div>
+        <>
+          {/* 黑色遮罩，點擊時關閉 */}
+          <div
+            className="fixed inset-0 bg-black bg-opacity-30 z-40"
+            onClick={() => setOpen(false)}
+          />
+
+          {/* 側欄本體，z-index 要比遮罩高 */}
+          <div className="fixed top-0 left-0 z-50">
+            <Sidebar onClose={() => setOpen(false)} />
+          </div>
+        </>
       )}
     </>
   );
