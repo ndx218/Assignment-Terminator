@@ -3,6 +3,7 @@
 import { signIn, useSession } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { showSuccess, showError } from '@/lib/toast';
 
 export default function LoginPage() {
   const { data: session } = useSession();
@@ -11,16 +12,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ✅ 登入成功後自動導向首頁
+  // ✅ 登入成功後導向首頁並提示
   useEffect(() => {
     if (session?.user) {
+      showSuccess('login');
       router.push('/');
     }
   }, [session, router]);
 
   const handleEmailSignIn = async () => {
     setLoading(true);
-    await signIn('email', { email });
+    const res = await signIn('email', { email, redirect: false });
+
+    if (res?.ok) {
+      showSuccess('email');
+    } else {
+      showError('email');
+    }
+
     setLoading(false);
   };
 
