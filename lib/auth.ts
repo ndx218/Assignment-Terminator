@@ -1,5 +1,5 @@
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import GitHubProvider from 'next-auth/providers/github';
+import GoogleProvider from 'next-auth/providers/google';
 import EmailProvider from 'next-auth/providers/email';
 import { prisma } from '@/lib/prisma';
 import type { NextAuthOptions, Session } from 'next-auth';
@@ -7,9 +7,9 @@ import type { JWT } from 'next-auth/jwt';
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GitHubProvider({
-      clientId: process.env.GITHUB_ID || '',
-      clientSecret: process.env.GITHUB_SECRET || '',
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     }),
     EmailProvider({
       server: process.env.EMAIL_SERVER!,
@@ -62,4 +62,4 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-export default authOptions; // ✅ 確保 default export
+export default authOptions;
