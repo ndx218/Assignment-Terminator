@@ -6,7 +6,6 @@ export default function HelpPage() {
         <h1 className="text-3xl font-bold mb-6">❓ 使用教學與常見問題</h1>
 
         <div className="space-y-8">
-          {/* 使用教學 */}
           <section>
             <h2 className="text-xl font-semibold mb-2">📌 如何使用 Assignment Terminator？</h2>
             <ol className="list-decimal list-inside text-gray-700 space-y-1">
@@ -18,7 +17,6 @@ export default function HelpPage() {
             </ol>
           </section>
 
-          {/* 功能說明 */}
           <section>
             <h2 className="text-xl font-semibold mb-2">🛠️ 功能說明</h2>
             <ul className="list-disc list-inside text-gray-700 space-y-1">
@@ -29,7 +27,6 @@ export default function HelpPage() {
             </ul>
           </section>
 
-          {/* 常見問題 */}
           <section>
             <h2 className="text-xl font-semibold mb-2">💡 常見問題</h2>
             <ul className="text-gray-700 space-y-6">
