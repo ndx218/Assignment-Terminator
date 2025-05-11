@@ -1,19 +1,21 @@
-// UI button component
+// components/ui/button.tsx
 import { cn } from '@/lib/utils';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
+import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
-  variant?: 'default' | 'outline';
+  variant?: 'default' | 'outline' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, isLoading, children, variant = 'default', size = 'md', ...props }, ref) => {
-    const base = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none';
+  ({ className, isLoading, children, variant = 'default', size = 'md', disabled, ...props }, ref) => {
+    const base = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
     const variants = {
       default: 'bg-blue-500 text-white hover:bg-blue-600',
       outline: 'border border-gray-300 text-gray-700 bg-white hover:bg-gray-100',
+      ghost: 'bg-transparent hover:bg-gray-100 text-gray-700',
     };
     const sizes = {
       sm: 'px-2 py-1 text-sm',
@@ -25,9 +27,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(base, variants[variant], sizes[size], className)}
+        disabled={disabled || isLoading}
         {...props}
       >
-        {isLoading ? '載入中...' : children}
+        {isLoading ? (
+          <AiOutlineLoading3Quarters className="animate-spin mr-2 h-4 w-4" />
+        ) : null}
+        {children}
       </button>
     );
   }
