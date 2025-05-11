@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { showSuccess, showError } from '@/lib/toast';
 
 export default function LoginPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
 
   const [email, setEmail] = useState('');
@@ -14,11 +14,13 @@ export default function LoginPage() {
 
   // ✅ 登入成功後導向首頁並提示
   useEffect(() => {
+    if (status === 'loading') return; // 還沒載入完成，先不跳轉
+
     if (session?.user) {
       showSuccess('login');
-      router.push('/');
+      router.replace('/'); // 用 replace 避免返回 login
     }
-  }, [session, router]);
+  }, [session, status, router]);
 
   const handleEmailSignIn = async () => {
     setLoading(true);
@@ -32,6 +34,14 @@ export default function LoginPage() {
 
     setLoading(false);
   };
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        正在驗證登入狀態...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
