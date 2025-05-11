@@ -1,10 +1,3 @@
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import GitHubProvider from 'next-auth/providers/github';
-import EmailProvider from 'next-auth/providers/email';
-import { prisma } from '@/lib/prisma';
-import type { NextAuthOptions, Session } from 'next-auth';
-import type { JWT } from 'next-auth/jwt';
-
 export const authOptions: NextAuthOptions = {
   providers: [
     GitHubProvider({
@@ -18,6 +11,12 @@ export const authOptions: NextAuthOptions = {
   ],
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
+
+  session: {
+    strategy: 'jwt',
+    maxAge: 365 * 24 * 60 * 60,       // ✅ 一年有效
+    updateAge: 30 * 24 * 60 * 60,     // ✅ 每 30 天刷新一次
+  },
 
   callbacks: {
     async jwt({ token, user }) {
@@ -55,5 +54,3 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
-
-export default authOptions;
