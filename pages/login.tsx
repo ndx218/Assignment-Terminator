@@ -1,4 +1,3 @@
-// pages/login.tsx
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -10,7 +9,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // ✅ 自動跳轉：登入成功 or 手動跳過登入
   useEffect(() => {
+    const skip = localStorage.getItem('skipLogin') === 'true';
+    if (skip) {
+      router.replace('/');
+      return;
+    }
+
     if (status === 'loading') return;
     if (session?.user) {
       showSuccess('login');
@@ -27,7 +33,7 @@ export default function LoginPage() {
 
   const handleSkipLogin = () => {
     localStorage.setItem('skipLogin', 'true');
-    router.replace('/'); // ✅ 強制導向首頁
+    router.replace('/');
   };
 
   if (status === 'loading') {
@@ -70,7 +76,7 @@ export default function LoginPage() {
         </div>
 
         <div className="text-center pt-2">
-          <button onClick={handleSkipLogin} className="text-sm text-gray-500 underline hover:text-black">
+          <button onClick={handleSkipLogin} className="text-sm text-red-600 underline hover:text-black">
             ❌ 跳過登入（測試用）
           </button>
         </div>
