@@ -63,6 +63,14 @@ export default function LoginPage() {
             發送登入連結
           </button>
         </div>
+
+        {/* 🔥 跳過登入按鈕 */}
+        <button
+          onClick={() => router.replace('/')}
+          className="w-full bg-gray-300 text-black py-2 rounded-xl hover:bg-gray-400"
+        >
+          ❌ 暫時跳過登入
+        </button>
       </div>
     </div>
   );
