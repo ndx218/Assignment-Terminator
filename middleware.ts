@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server';
 export async function middleware(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
-  const protectedPaths = ['/admin', '/recharge'];
+  const protectedPaths = ['/admin'];
   const isProtected = protectedPaths.some((path) => req.nextUrl.pathname.startsWith(path));
 
   if (isProtected && !token) {
@@ -17,5 +17,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/recharge/:path*'], // 保護這些路徑
+  matcher: ['/admin/:path*'], // ✅ 只保護 admin 頁
 };
