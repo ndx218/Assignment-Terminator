@@ -1,3 +1,4 @@
+// pages/login.tsx
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -9,7 +10,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ✅ 如果登入成功，導向首頁
   useEffect(() => {
     if (status === 'loading') return;
     if (session?.user) {
@@ -18,17 +18,16 @@ export default function LoginPage() {
     }
   }, [session, status]);
 
-  // ✅ 跳過登入，導向首頁並加入 skip flag
-  const handleSkipLogin = () => {
-    localStorage.setItem('skipLogin', 'true');
-    router.replace('/');
-  };
-
   const handleEmailSignIn = async () => {
     setLoading(true);
     const res = await signIn('email', { email, redirect: false });
     res?.ok ? showSuccess('email') : showError('email');
     setLoading(false);
+  };
+
+  const handleSkipLogin = () => {
+    localStorage.setItem('skipLogin', 'true');
+    router.replace('/'); // ✅ 強制導向首頁
   };
 
   if (status === 'loading') {
