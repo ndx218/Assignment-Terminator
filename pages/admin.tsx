@@ -1,4 +1,3 @@
-// ✅ /pages/admin.tsx
 'use client';
 
 import { useState } from 'react';
@@ -20,31 +19,53 @@ export default function AdminPage() {
     setLoading(true);
     setMessage('');
 
-    const res = await fetch('/api/admin/add-points', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, amount: Number(points) }),
-    });
+    try {
+      const res = await fetch('/api/admin/add-points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, amount: Number(points) }),
+      });
 
-    const data = await res.json();
-    setLoading(false);
+      const data = await res.json();
+      setLoading(false);
 
-    if (res.ok) {
-      setMessage(`✅ 已成功加點：${data.message}`);
-    } else {
-      setMessage(`❌ 錯誤：${data.error}`);
+      if (res.ok) {
+        setMessage(`✅ 成功：已為 ${email} 加 ${points} 點`);
+      } else {
+        setMessage(`❌ 錯誤：${data.error}`);
+      }
+    } catch (err) {
+      setLoading(false);
+      setMessage('❌ 系統錯誤，請稍後再試');
     }
   };
 
   return (
     <div className="max-w-md mx-auto p-6 space-y-4">
       <h1 className="text-2xl font-bold">👑 管理員加點工具</h1>
-      <Input placeholder="使用者 Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <Input placeholder="加幾點？" value={points} onChange={(e) => setPoints(e.target.value)} type="number" />
+
+      <Input
+        placeholder="使用者 Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full"
+      />
+
+      <Input
+        placeholder="加幾點？"
+        type="number"
+        value={points}
+        onChange={(e) => setPoints(e.target.value)}
+        className="w-full"
+      />
+
       <Button onClick={handleAddPoints} isLoading={loading} className="w-full">
-        ➕ 加點
+        ➕ 確認加點
       </Button>
-      {message && <p className="mt-2 text-sm text-center">{message}</p>}
+
+      {message && (
+        <p className="mt-2 text-sm text-center text-gray-700">{message}</p>
+      )}
     </div>
   );
 }
