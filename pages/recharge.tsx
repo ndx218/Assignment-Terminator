@@ -1,10 +1,42 @@
-// ✅ /pages/recharge.tsx
-import { useState } from 'react';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/router';
 import Image from 'next/image';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 export default function RechargePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [skipLogin, setSkipLogin] = useState<boolean | null>(null);
+
+  // ✅ 檢查是否跳過登入
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const skip = localStorage.getItem('skipLogin') === 'true';
+      setSkipLogin(skip);
+    }
+  }, []);
+
+  // ✅ 未登入且沒 skipLogin 時導向登入
+  useEffect(() => {
+    if (skipLogin === false && status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router, skipLogin]);
+
+  // ✅ 尚未完成驗證前，不顯示畫面
+  if (skipLogin === null || (!skipLogin && status === 'loading')) {
+    return (
+      <div className="h-screen flex items-center justify-center text-gray-500">
+        ⏳ 載入中...
+      </div>
+    );
+  }
+
+  // ✅ 以下是原本的充值表單 UI
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [referralCode, setReferralCode] = useState('');
