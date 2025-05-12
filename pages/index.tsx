@@ -7,7 +7,6 @@ export default function HomePage() {
   const router = useRouter();
   const [skipLogin, setSkipLogin] = useState(false);
 
-  // ✅ 判斷是否手動跳過登入
   useEffect(() => {
     const skip = localStorage.getItem('skipLogin') === 'true';
     setSkipLogin(skip);
@@ -51,9 +50,7 @@ export default function HomePage() {
         <li>💳 點數充值與推薦碼功能</li>
       </ul>
 
-      <p className="text-sm text-gray-500">
-        👉 使用左側功能列開始操作！
-      </p>
+      <p className="text-sm text-gray-500">👉 使用左側功能列開始操作！</p>
     </div>
   );
 }
