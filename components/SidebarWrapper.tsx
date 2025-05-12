@@ -9,30 +9,32 @@ export default function SidebarWrapper() {
 
   return (
     <>
-      {/* 📱/🖥️ 全裝置顯示漢堡按鈕（僅控制手機浮出） */}
+      {/* 📱 手機版漢堡按鈕 */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-full bg-white border shadow-md md:hidden"
+        className="fixed top-4 left-4 z-40 p-2 rounded-full bg-white border shadow-md md:hidden"
         aria-label="開啟選單"
       >
         <Menu className="w-5 h-5 text-black" />
       </button>
 
-      {/* 📱 漢堡開啟時：浮出側欄 + 遮罩 */}
+      {/* 📱 手機版浮出側欄 + 遮罩 */}
       {open && (
         <>
+          {/* 黑色遮罩 */}
           <div
-            className="fixed inset-0 bg-black bg-opacity-30 z-40 md:hidden"
+            className="fixed inset-0 z-30 bg-black bg-opacity-30 backdrop-blur-sm"
             onClick={() => setOpen(false)}
           />
-          <div className="fixed top-0 left-0 z-50 md:hidden">
+          {/* 側欄浮出 */}
+          <div className="fixed top-0 left-0 z-40 w-[240px] h-full bg-white shadow-md">
             <Sidebar onClose={() => setOpen(false)} />
           </div>
         </>
       )}
 
-      {/* 🖥️ 桌面版固定側欄：永遠顯示 */}
-      <div className="hidden md:block">
+      {/* 🖥️ 桌面版固定側欄 */}
+      <div className="hidden md:block w-[240px] fixed top-0 left-0 h-full z-30 border-r bg-white">
         <Sidebar />
       </div>
     </>
