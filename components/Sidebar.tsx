@@ -1,12 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Home, Wallet, HelpCircle, LogOut, X } from 'lucide-react';
+import { signOut } from 'next-auth/react';
 
-export default function Sidebar({ onClose }: { onClose?: () => void }) {
+interface SidebarProps {
+  onClose?: () => void;
+}
+
+export default function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const mainMenu = [
     { label: '作業產生器', href: '/', icon: Home },
@@ -14,15 +20,20 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
     { label: '常見問題', href: '/help', icon: HelpCircle },
   ];
 
+  const handleLogout = async () => {
+    localStorage.removeItem('skipLogin'); // ✅ 清除跳過登入 flag
+    await signOut({ redirect: false });   // ✅ 登出但不自動跳轉
+    router.replace('/login');             // ✅ 手動跳轉
+  };
+
   return (
     <aside
       className={cn(
-        'h-screen w-[240px] bg-white text-black flex flex-col pt-4 shadow-md z-50',
-        onClose ? 'fixed left-0 top-0' : 'hidden md:flex md:fixed md:left-0 md:top-0'
+        'h-screen w-[240px] bg-white text-black flex flex-col pt-4 shadow-md',
+        onClose ? 'fixed top-0 left-0 z-50' : 'hidden md:flex md:fixed md:top-0 md:left-0 md:z-30'
       )}
-      onClick={(e) => e.stopPropagation()} // 防止浮出模式被遮罩點擊關閉
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Logo + 關閉按鈕（只在手機浮出時顯示） */}
       <div className="px-6 mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold leading-tight">
           📚 Assignment<br />Terminator
@@ -38,43 +49,40 @@ export default function Sidebar({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
-      {/* 主選單 */}
       <nav className="flex flex-col gap-1 px-2">
-        {mainMenu.map((item) => {
-          const isActive = pathname === item.href;
-          const Icon = item.icon;
+        {mainMenu.map(({ href, label, icon: Icon }) => {
+          const isActive = pathname === href;
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              key={href}
+              href={href}
               className={cn(
-                'flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-100',
-                isActive && 'bg-gray-100 font-semibold'
+                'flex items-center gap-3 px-4 py-2 rounded-md transition-colors',
+                isActive
+                  ? 'bg-gray-100 font-semibold text-black'
+                  : 'text-gray-700 hover:bg-gray-100'
               )}
               onClick={onClose}
             >
               <Icon className="w-5 h-5" />
-              <span className="text-sm">{item.label}</span>
+              <span className="text-sm">{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <hr className="my-4 border-gray-300 mx-4" />
+      <hr className="my-4 border-gray-200 mx-4" />
 
-      {/* 登出 */}
       <nav className="flex flex-col gap-1 px-2">
-        <Link
-          href="/logout"
-          className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors hover:bg-gray-100"
-          onClick={onClose}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-gray-700 hover:bg-gray-100"
         >
           <LogOut className="w-5 h-5" />
           <span className="text-sm">登出</span>
-        </Link>
+        </button>
       </nav>
 
-      {/* 底部版權資訊 */}
       <div className="mt-auto text-xs text-gray-400 px-4 py-3">
         © 2025 ChakFung
       </div>
