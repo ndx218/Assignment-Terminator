@@ -5,7 +5,7 @@ export default function RedirectHome() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/editor'); // ⬅️ 將 '/editor' 改成你的作業產生器頁面路徑
+    router.replace('/admin'); // ✅ 自動導向到作業產生器頁
   }, [router]);
 
   return null;
