@@ -1,7 +1,6 @@
-// ✅ /pages/api/admin/add-points.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
+import authOptions from '../auth/[...nextauth]'; // ✅ default 匯入
 import { prisma } from '@/lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,7 +22,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // ✅ 更新點數
     const user = await prisma.user.update({
       where: { email },
       data: {
@@ -31,7 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     });
 
-    // ✅ 同時記錄一筆交易
     await prisma.transaction.create({
       data: {
         userId: user.id,
