@@ -7,7 +7,8 @@ import { prisma } from '@/lib/prisma';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
 
-  if (!session || session.user?.email !== 'your-admin@email.com') {
+  // ✅ 修改為你自己的管理員帳號
+  if (!session || session.user?.email !== 'ndx218@gmail.com') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
   }
 
@@ -22,10 +23,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    // ✅ 更新點數
     const user = await prisma.user.update({
       where: { email },
       data: {
         credits: { increment: amount },
+      },
+    });
+
+    // ✅ 同時記錄一筆交易
+    await prisma.transaction.create({
+      data: {
+        userId: user.id,
+        amount,
+        isFirstTopUp: !(await prisma.transaction.findFirst({ where: { userId: user.id } })),
       },
     });
 
