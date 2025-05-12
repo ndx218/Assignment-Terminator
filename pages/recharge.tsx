@@ -1,3 +1,4 @@
+// ✅ /pages/recharge.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,6 @@ export default function RechargePage() {
   const router = useRouter();
   const [skipLogin, setSkipLogin] = useState<boolean | null>(null);
 
-  // ✅ 檢查是否跳過登入
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const skip = localStorage.getItem('skipLogin') === 'true';
@@ -20,14 +20,12 @@ export default function RechargePage() {
     }
   }, []);
 
-  // ✅ 未登入且沒 skipLogin 時導向登入
   useEffect(() => {
     if (skipLogin === false && status === 'unauthenticated') {
       router.push('/login');
     }
   }, [status, router, skipLogin]);
 
-  // ✅ 尚未完成驗證前，不顯示畫面
   if (skipLogin === null || (!skipLogin && status === 'loading')) {
     return (
       <div className="h-screen flex items-center justify-center text-gray-500">
@@ -36,7 +34,6 @@ export default function RechargePage() {
     );
   }
 
-  // ✅ 以下是原本的充值表單 UI
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -76,19 +73,73 @@ export default function RechargePage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-6 space-y-10">
       <h2 className="text-2xl font-bold">💳 點數充值</h2>
+
+      {/* ✅ 套餐方案表格 */}
+      <div className="overflow-x-auto">
+        <table className="w-full border border-gray-300 text-sm">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="border px-3 py-2 text-left">套餐名稱</th>
+              <th className="border px-3 py-2 text-center">金額</th>
+              <th className="border px-3 py-2 text-center">點數</th>
+              <th className="border px-3 py-2 text-center">每點成本</th>
+              <th className="border px-3 py-2">備註</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border px-3 py-2">🎁 首充套餐</td>
+              <td className="border px-3 py-2 text-center">$10</td>
+              <td className="border px-3 py-2 text-center">25 + 推薦點</td>
+              <td className="border px-3 py-2 text-center">$0.40</td>
+              <td className="border px-3 py-2">推薦有獎</td>
+            </tr>
+            <tr>
+              <td className="border px-3 py-2">💡 入門套餐</td>
+              <td className="border px-3 py-2 text-center">$20</td>
+              <td className="border px-3 py-2 text-center">28</td>
+              <td className="border px-3 py-2 text-center">$0.71</td>
+              <td className="border px-3 py-2">一般小額使用者</td>
+            </tr>
+            <tr>
+              <td className="border px-3 py-2">💼 小資套餐</td>
+              <td className="border px-3 py-2 text-center">$30</td>
+              <td className="border px-3 py-2 text-center">35</td>
+              <td className="border px-3 py-2 text-center">$0.86</td>
+              <td className="border px-3 py-2">穩定銷售款</td>
+            </tr>
+            <tr>
+              <td className="border px-3 py-2">📘 標準套餐</td>
+              <td className="border px-3 py-2 text-center">$50</td>
+              <td className="border px-3 py-2 text-center">60</td>
+              <td className="border px-3 py-2 text-center">$0.83</td>
+              <td className="border px-3 py-2">高頻使用者</td>
+            </tr>
+            <tr>
+              <td className="border px-3 py-2">💎 高級套餐</td>
+              <td className="border px-3 py-2 text-center">$100</td>
+              <td className="border px-3 py-2 text-center">125</td>
+              <td className="border px-3 py-2 text-center">$0.80</td>
+              <td className="border px-3 py-2">送 25 點</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ✅ 付款與上傳區域 */}
       <p>
-        💡 請選擇其中一種付款方式：<br />
         📱 <strong>Alipay（香港）</strong>：請使用 Alipay 掃描下方 QR Code 完成付款。
       </p>
       <Image src="/alipay-qr.png" alt="Alipay QR Code" width={240} height={240} className="mx-auto" />
       <p>
-        🌐 <strong>PayPal</strong>：請使用 PayPal 付款連結（支援信用卡）：<br />
-        👉 <a className="text-blue-600 underline" href="https://www.paypal.com/paypalme/TamChakFung" target="_blank" rel="noopener noreferrer">
+        🌐 <strong>PayPal</strong>：請使用 PayPal 付款連結：
+        <a className="text-blue-600 underline ml-1" href="https://www.paypal.com/paypalme/TamChakFung" target="_blank" rel="noopener noreferrer">
           https://www.paypal.com/paypalme/TamChakFung
         </a>
       </p>
+
       <p className="text-sm text-muted-foreground">
         📤 付款後請上傳付款截圖與你的姓名，本人會於 24 小時內人工審核並開通點數。如遇週末或深夜可能略有延遲，敬請見諒 🙏。
       </p>
