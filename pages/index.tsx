@@ -1,19 +1,25 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [skipLogin, setSkipLogin] = useState(false);
 
-  // ✅ 未登入時導向 login 頁面
+  // ✅ 判斷是否手動跳過登入
   useEffect(() => {
-    if (status === 'unauthenticated') {
+    const skip = localStorage.getItem('skipLogin') === 'true';
+    setSkipLogin(skip);
+  }, []);
+
+  useEffect(() => {
+    if (!skipLogin && status === 'unauthenticated') {
       router.push('/login');
     }
-  }, [status, router]);
+  }, [status, router, skipLogin]);
 
-  if (status === 'loading') {
+  if (!skipLogin && status === 'loading') {
     return (
       <div className="h-screen flex items-center justify-center text-gray-500">
         🔐 正在驗證登入狀態...
