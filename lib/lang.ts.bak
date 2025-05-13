@@ -1,19 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-
 export type Lang = 'zh-TW' | 'zh-CN' | 'en';
 
-/** 暫時停用繁簡轉換，原樣返回 */
+/** 繁體 → 簡體（暫時無轉換） */
 export function toSimplified(text: string): string {
   return text;
 }
 
+/** 簡體 → 繁體（暫時無轉換） */
 export function toTraditional(text: string): string {
   return text;
 }
 
-/** 中文翻譯英文 */
+/** 中文翻譯英文（保留） */
 export async function toEnglish(text: string): Promise<string> {
   try {
     const res = await fetch(
@@ -28,7 +27,9 @@ export async function toEnglish(text: string): Promise<string> {
   }
 }
 
-/** 語言切換 Hook */
+/** 語言切換 Hook（保留但不轉換） */
+import { useState } from 'react';
+
 export function useLang() {
   const [lang, setLang] = useState<Lang>('zh-TW');
   const toggleLang = () => {
