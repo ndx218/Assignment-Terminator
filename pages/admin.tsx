@@ -1,14 +1,35 @@
+// ✅ /pages/admin.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/router';
+
+interface Transaction {
+  id: string;
+  amount: number;
+  isFirstTopUp: boolean;
+  createdAt: string;
+}
 
 export default function AdminPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [email, setEmail] = useState('');
   const [points, setPoints] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  // ✅ 僅限管理員使用
+  useEffect(() => {
+    if (status !== 'loading' && session?.user?.email !== 'ndx218@gmail.com') {
+      router.replace('/');
+    }
+  }, [status, session, router]);
 
   const handleAddPoints = async () => {
     if (!email || !points) {
@@ -19,53 +40,56 @@ export default function AdminPage() {
     setLoading(true);
     setMessage('');
 
-    try {
-      const res = await fetch('/api/admin/add-points', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, amount: Number(points) }),
-      });
+    const res = await fetch('/api/admin/add-points', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, amount: Number(points) }),
+    });
 
-      const data = await res.json();
-      setLoading(false);
+    const data = await res.json();
+    setLoading(false);
 
-      if (res.ok) {
-        setMessage(`✅ 成功：已為 ${email} 加 ${points} 點`);
-      } else {
-        setMessage(`❌ 錯誤：${data.error}`);
-      }
-    } catch (err) {
-      setLoading(false);
-      setMessage('❌ 系統錯誤，請稍後再試');
+    if (res.ok) {
+      setMessage(`✅ ${data.message}`);
+      fetchTransactions();
+    } else {
+      setMessage(`❌ 錯誤：${data.error}`);
     }
   };
 
+  const fetchTransactions = async () => {
+    const res = await fetch(`/api/admin/transactions?email=${email}`);
+    const data = await res.json();
+    if (res.ok) setTransactions(data.transactions);
+  };
+
   return (
-    <div className="max-w-md mx-auto p-6 space-y-4">
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold">👑 管理員加點工具</h1>
 
-      <Input
-        placeholder="使用者 Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full"
-      />
-
-      <Input
-        placeholder="加幾點？"
-        type="number"
-        value={points}
-        onChange={(e) => setPoints(e.target.value)}
-        className="w-full"
-      />
-
+      <Input placeholder="使用者 Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+      <Input placeholder="加幾點？" value={points} onChange={(e) => setPoints(e.target.value)} type="number" />
       <Button onClick={handleAddPoints} isLoading={loading} className="w-full">
-        ➕ 確認加點
+        ➕ 加點
       </Button>
 
-      {message && (
-        <p className="mt-2 text-sm text-center text-gray-700">{message}</p>
-      )}
+      {message && <p className="text-sm text-center mt-2">{message}</p>}
+
+      <hr className="my-6" />
+
+      <h2 className="text-lg font-semibold">📜 交易紀錄</h2>
+      <Button variant="outline" onClick={fetchTransactions} className="mb-2 text-sm">
+        🔄 查詢紀錄
+      </Button>
+
+      <ul className="text-sm space-y-2">
+        {transactions.map((tx) => (
+          <li key={tx.id} className="border rounded p-2">
+            💰 {tx.amount} 點 - {tx.isFirstTopUp ? '首充' : '加值'} - {new Date(tx.createdAt).toLocaleString()}
+          </li>
+        ))}
+        {transactions.length === 0 && <li className="text-gray-400">尚無紀錄</li>}
+      </ul>
     </div>
   );
 }
