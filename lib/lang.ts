@@ -1,28 +1,16 @@
 'use client';
 
-import { s2t, t2s } from 'zh-convert';
 import { useState } from 'react';
 
 export type Lang = 'zh-TW' | 'zh-CN' | 'en';
 
-/** 繁體 → 簡體 */
+/** 暫時停用繁簡轉換，原樣返回 */
 export function toSimplified(text: string): string {
-  try {
-    return t2s(text);
-  } catch (e) {
-    console.error('[繁轉簡錯誤]', e);
-    return text;
-  }
+  return text;
 }
 
-/** 簡體 → 繁體 */
 export function toTraditional(text: string): string {
-  try {
-    return s2t(text);
-  } catch (e) {
-    console.error('[簡轉繁錯誤]', e);
-    return text;
-  }
+  return text;
 }
 
 /** 中文翻譯英文 */
