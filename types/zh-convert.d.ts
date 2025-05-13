@@ -1,4 +1,7 @@
 declare module 'zh-convert' {
-  export function s2t(text: string): string;
-  export function t2s(text: string): string;
+  const zhConvert: {
+    s2t: (input: string) => string;
+    t2s: (input: string) => string;
+  };
+  export default zhConvert;
 }
