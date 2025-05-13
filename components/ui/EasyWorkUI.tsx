@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import Textarea from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useLang, toSimplified, toTraditional } from '@/lib/lang';
 
 const sections = [
   { key: 'outline', label: '📑 大綱產生器' },
@@ -17,8 +16,6 @@ const sections = [
 ];
 
 export default function EasyWorkUI() {
-  const { lang, toggleLang } = useLang();
-
   const [form, setForm] = useState({
     name: '', school: '', title: '', wordCount: '', language: '中文', tone: '正式',
     detail: '', reference: '', rubric: '', paragraph: ''
@@ -29,14 +26,12 @@ export default function EasyWorkUI() {
   const [loading, setLoading] = useState(false);
   const [hLoading, setHLoading] = useState(false);
 
-  const convertText = (text: string) => lang === 'zh-CN' ? toSimplified(text) : toTraditional(text);
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleCopy = (key: string) => {
-    navigator.clipboard.writeText(convertText(results[key] || ''));
+    navigator.clipboard.writeText(results[key] || '');
     setCopied((prev) => ({ ...prev, [key]: true }));
     setTimeout(() => setCopied((prev) => ({ ...prev, [key]: false })), 2000);
   };
@@ -46,7 +41,8 @@ export default function EasyWorkUI() {
     setLoading(true);
     try {
       const res = await fetch(endpoint, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
       const data = await res.json();
@@ -62,7 +58,7 @@ export default function EasyWorkUI() {
     <div className="flex h-screen">
       <div className="w-64 border-r p-4 bg-gray-50">
         <h2 className="font-bold text-lg mb-4">📚 功課設定</h2>
-        {[ 'name','school','title','wordCount','reference','rubric','paragraph'].map((field) => (
+        {['name', 'school', 'title', 'wordCount', 'reference', 'rubric', 'paragraph'].map((field) => (
           <Input key={field} name={field} placeholder={field} onChange={handleChange} className="mb-2 w-full" />
         ))}
         <select name="language" onChange={handleChange} className="mb-2 w-full border rounded px-2 py-1">
@@ -81,12 +77,6 @@ export default function EasyWorkUI() {
         <Button onClick={() => fetchData('/api/feedback', 'feedback', { text: results.draft })} isLoading={loading} className="w-full bg-yellow-500 text-black mt-2">🧑‍🏫 教師評論</Button>
         <Button onClick={() => fetchData('/api/rewrite', 'rewrite', { text: results.draft })} isLoading={loading} className="w-full bg-green-600 text-white mt-2">📝 GPT-style 修訂</Button>
         <Button onClick={() => fetchData('/api/undetectable', 'final', { text: results.rewrite })} isLoading={hLoading} className="w-full bg-gray-800 text-white mt-2">🤖 最終人性化優化</Button>
-
-        <div className="mt-6">
-          <Button onClick={toggleLang} className="w-full bg-yellow-400">
-            🌐 切換語言：{lang === 'zh-TW' ? '繁體' : '簡體'}
-          </Button>
-        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -103,7 +93,7 @@ export default function EasyWorkUI() {
                 <h3 className="font-semibold mb-2">{label}：</h3>
                 <Textarea
                   className="whitespace-pre-wrap mb-2 w-full"
-                  value={convertText(results[key] || '')}
+                  value={results[key] || ''}
                   onChange={(e) => setResults((r) => ({ ...r, [key]: e.target.value }))}
                 />
                 {results[key] && (
