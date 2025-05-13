@@ -2,9 +2,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
 import authOptions from '../auth/[...nextauth]';
 import { prisma } from '@/lib/prisma';
+import type { Session } from 'next-auth'; // ✅ 加入型別
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getServerSession(req, res, authOptions);
+  const session: Session | null = await getServerSession(req, res, authOptions); // ✅ 加上型別保護
 
   if (!session || session.user?.email !== 'ndx218@gmail.com') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
