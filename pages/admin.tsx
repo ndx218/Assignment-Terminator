@@ -58,9 +58,14 @@ export default function AdminPage() {
   };
 
   const fetchTransactions = async () => {
+    if (!email) {
+      alert('請先輸入 Email');
+      return;
+    }
     const res = await fetch(`/api/admin/transactions?email=${email}`);
     const data = await res.json();
     if (res.ok) setTransactions(data.transactions);
+    else alert(data.error || '查詢失敗');
   };
 
   return (
