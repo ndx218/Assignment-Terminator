@@ -1,6 +1,7 @@
 // components/ui/button.tsx
+
 import { cn } from '@/lib/utils';
-import { ButtonHTMLAttributes, forwardRef } from 'react';
+import { forwardRef, ButtonHTMLAttributes } from 'react';
 import { AiOutlineLoading3Quarters } from 'react-icons/ai';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -9,7 +10,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, isLoading, children, variant = 'default', size = 'md', disabled, ...props }, ref) => {
     const base = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
     const variants = {
@@ -40,6 +41,3 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
-
-export { Button };         // ✅ 支援命名匯出
-export default Button;     // ✅ 也支援 default 匯出
