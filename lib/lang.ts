@@ -4,7 +4,8 @@
 import zhConvert from 'zh-convert';
 import { useState } from 'react';
 
-export type Lang = 'zh-TW' | 'zh-CN';
+export type Lang = 'zh-TW' | 'zh-CN' | 'en';
+
 
 /** 繁體 → 簡體 */
 export function toSimplified(text: string): string {
