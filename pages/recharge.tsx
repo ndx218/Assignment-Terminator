@@ -11,7 +11,6 @@ export default function RechargePage() {
   const router = useRouter();
   const [skipLogin, setSkipLogin] = useState<boolean | null>(null);
 
-  // ✅ 判斷是否 skipLogin
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const skip = localStorage.getItem('skipLogin') === 'true';
@@ -19,7 +18,6 @@ export default function RechargePage() {
     }
   }, []);
 
-  // ✅ 若沒登入且沒 skip，導向登入
   useEffect(() => {
     if (skipLogin === false && status === 'unauthenticated') {
       router.push('/login');
@@ -34,7 +32,6 @@ export default function RechargePage() {
     );
   }
 
-  // ✅ 表單邏輯
   const [name, setName] = useState('');
   const [contact, setContact] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -77,7 +74,7 @@ export default function RechargePage() {
     <div className="max-w-3xl mx-auto p-6 space-y-10">
       <h2 className="text-2xl font-bold">💳 點數充值</h2>
 
-      {/* ✅ 套餐表格 */}
+      {/* 套餐方案表格 */}
       <div className="overflow-x-auto">
         <table className="w-full border border-gray-300 text-sm">
           <thead className="bg-gray-100">
@@ -129,14 +126,19 @@ export default function RechargePage() {
         </table>
       </div>
 
-      {/* ✅ 付款與上傳區域 */}
+      {/* 付款資訊與上傳 */}
       <p>
         📱 <strong>Alipay（香港）</strong>：請使用 Alipay 掃描下方 QR Code 完成付款。
       </p>
       <img src="/alipay-qr.png" alt="Alipay QR Code" width={240} height={240} className="mx-auto" />
       <p>
-        🌐 <strong>PayPal</strong>：請使用 PayPal：
-        <a className="text-blue-600 underline ml-1" href="https://www.paypal.com/paypalme/TamChakFung" target="_blank" rel="noopener noreferrer">
+        🌐 <strong>PayPal</strong>：
+        <a
+          className="text-blue-600 underline ml-1"
+          href="https://www.paypal.com/paypalme/TamChakFung"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           https://www.paypal.com/paypalme/TamChakFung
         </a>
       </p>
@@ -145,22 +147,14 @@ export default function RechargePage() {
         📤 付款後請上傳付款截圖與你的姓名，本人會於 24 小時內人工審核並開通點數。如遇週末或深夜可能略有延遲，敬請見諒 🙏。
       </p>
 
-      {/* ✅ 表單欄位 */}
       <Input placeholder="你的姓名" value={name} onChange={(e) => setName(e.target.value)} />
       <Input placeholder="聯絡方式（微信 / WhatsApp）" value={contact} onChange={(e) => setContact(e.target.value)} />
       <Input placeholder="推薦碼（可選）" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} />
       <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
 
-      {/* ✅ 圖片預覽（修正 crash） */}
       {file && typeof window !== 'undefined' && (
         <div className="flex justify-center">
-          <img
-            src={URL.createObjectURL(file)}
-            alt="預覽圖"
-            width={200}
-            height={200}
-            className="rounded-lg"
-          />
+          <img src={URL.createObjectURL(file)} alt="預覽圖" width={200} height={200} className="rounded-lg" />
         </div>
       )}
 
