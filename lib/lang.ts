@@ -1,7 +1,7 @@
 'use client';
 
-// @ts-ignore 忽略沒有型別定義的套件
-import { t2s, s2t } from 'zh-convert';
+// ✅ 改用 CommonJS 方式匯入
+import zhConvert from 'zh-convert';
 import { useState } from 'react';
 
 export type Lang = 'zh-TW' | 'zh-CN';
@@ -9,7 +9,7 @@ export type Lang = 'zh-TW' | 'zh-CN';
 /** 繁體 → 簡體 */
 export function toSimplified(text: string): string {
   try {
-    return t2s(text); // zh-convert 無型別但功能正常
+    return zhConvert.t2s(text);
   } catch (e) {
     console.error('[繁轉簡錯誤]', e);
     return text;
@@ -19,7 +19,7 @@ export function toSimplified(text: string): string {
 /** 簡體 → 繁體 */
 export function toTraditional(text: string): string {
   try {
-    return s2t(text);
+    return zhConvert.s2t(text);
   } catch (e) {
     console.error('[簡轉繁錯誤]', e);
     return text;
