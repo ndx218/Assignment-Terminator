@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,13 @@ export default function RechargeContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [skipLogin, setSkipLogin] = useState<boolean | null>(null);
+
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -22,23 +29,19 @@ export default function RechargeContent() {
     if (skipLogin === false && status === 'unauthenticated') {
       router.push('/login');
     }
-  }, [skipLogin, status]);
+  }, [status, router, skipLogin]);
 
   if (skipLogin === null || (!skipLogin && status === 'loading')) {
-    return <div className="h-screen flex items-center justify-center text-gray-500">⏳ 載入中...</div>;
+    return (
+      <div className="h-screen flex items-center justify-center text-gray-500">
+        ⏳ 載入中...
+      </div>
+    );
   }
-
-  const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
-  const [referralCode, setReferralCode] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState<boolean | null>(null);
 
   const handleUpload = async () => {
     if (!name || !contact || !file) {
-      alert('⚠️ 請填寫所有欄位並選擇截圖');
+      alert('請填寫所有欄位並選擇截圖');
       return;
     }
 
@@ -49,56 +52,44 @@ export default function RechargeContent() {
     formData.append('referralCode', referralCode);
 
     setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/upload-payment', {
-        method: 'POST',
-        body: formData,
-      });
-      const ok = res.ok;
-      setSuccess(ok);
-      if (ok) {
-        setName('');
-        setContact('');
-        setReferralCode('');
-        setFile(null);
-        setPreviewUrl(null);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } catch (err) {
-      console.error(err);
-      setSuccess(false);
-    } finally {
-      setIsSubmitting(false);
+    const res = await fetch('/api/upload-payment', {
+      method: 'POST',
+      body: formData,
+    });
+    setIsSubmitting(false);
+    setSuccess(res.ok);
+
+    if (res.ok) {
+      setName('');
+      setContact('');
+      setReferralCode('');
+      setFile(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      alert('上傳失敗，請稍後重試');
     }
   };
 
   return (
-    <div className="max-w-xl mx-auto p-6 space-y-6">
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h2 className="text-2xl font-bold">💳 點數充值</h2>
-
-      <div className="text-sm text-gray-600">
-        請填寫正確資料，本人將於 24 小時內開通點數。如遇週末／深夜略有延遲 🙏
-      </div>
 
       <Input placeholder="你的姓名" value={name} onChange={(e) => setName(e.target.value)} />
       <Input placeholder="聯絡方式（微信 / WhatsApp）" value={contact} onChange={(e) => setContact(e.target.value)} />
       <Input placeholder="推薦碼（可選）" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} />
-      <Input type="file" accept="image/*" onChange={(e) => {
-        const file = e.target.files?.[0] || null;
-        setFile(file);
-        setPreviewUrl(file ? URL.createObjectURL(file) : null);
-      }} />
+      <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
 
-      {previewUrl && (
+      {file && typeof window !== 'undefined' && (
         <div className="flex justify-center">
-          <img src={previewUrl} alt="預覽圖" className="rounded-lg mt-2 max-w-[200px]" />
+          <img src={URL.createObjectURL(file)} alt="預覽圖" width={200} height={200} className="rounded-lg" />
         </div>
       )}
 
-      <Button onClick={handleUpload} isLoading={isSubmitting} className="w-full">📤 提交付款資料</Button>
+      <Button onClick={handleUpload} isLoading={isSubmitting} className="w-full">
+        📤 提交付款資料
+      </Button>
 
-      {success === true && <p className="text-green-600">✅ 上傳成功！請等待人工開通</p>}
-      {success === false && <p className="text-red-500">❌ 上傳失敗，請稍後再試</p>}
+      {success && <p className="text-green-600 mt-4">✅ 上傳成功！請等待人工開通</p>}
     </div>
   );
 }
