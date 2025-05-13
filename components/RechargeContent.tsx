@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,9 @@ export default function RechargeContent() {
   const [contact, setContact] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -29,7 +30,7 @@ export default function RechargeContent() {
     if (skipLogin === false && status === 'unauthenticated') {
       router.push('/login');
     }
-  }, [status, router, skipLogin]);
+  }, [skipLogin, status]);
 
   if (skipLogin === null || (!skipLogin && status === 'loading')) {
     return <div className="h-screen flex items-center justify-center text-gray-500">⏳ 載入中...</div>;
@@ -37,7 +38,7 @@ export default function RechargeContent() {
 
   const handleUpload = async () => {
     if (!name || !contact || !file) {
-      alert('請填寫所有欄位並選擇截圖');
+      alert('⚠️ 請填寫所有欄位並選擇截圖');
       return;
     }
 
@@ -48,31 +49,36 @@ export default function RechargeContent() {
     formData.append('referralCode', referralCode);
 
     setIsSubmitting(true);
-    const res = await fetch('/api/upload-payment', {
-      method: 'POST',
-      body: formData,
-    });
-    setIsSubmitting(false);
-    setSuccess(res.ok);
-
-    if (res.ok) {
-      setName('');
-      setContact('');
-      setReferralCode('');
-      setFile(null);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      alert('上傳失敗，請稍後重試');
+    try {
+      const res = await fetch('/api/upload-payment', {
+        method: 'POST',
+        body: formData,
+      });
+      const ok = res.ok;
+      setSuccess(ok);
+      if (ok) {
+        setName('');
+        setContact('');
+        setReferralCode('');
+        setFile(null);
+        setPreviewUrl(null);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (err) {
+      console.error(err);
+      setSuccess(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="max-w-3xl mx-auto p-6 space-y-8">
       <h2 className="text-2xl font-bold">💳 點數充值</h2>
 
-      {/* 📦 套餐方案表格 */}
-      <div className="overflow-x-auto text-sm border border-gray-200 rounded-md">
-        <table className="w-full">
+      {/* 套餐表格 */}
+      <div className="overflow-x-auto">
+        <table className="w-full border border-gray-300 text-sm">
           <thead className="bg-gray-100">
             <tr>
               <th className="border px-3 py-2 text-left">套餐名稱</th>
@@ -122,26 +128,30 @@ export default function RechargeContent() {
         </table>
       </div>
 
-      {/* 📌 付款說明區塊 */}
-      <div className="text-sm text-gray-700 leading-relaxed bg-yellow-50 border border-yellow-300 p-3 rounded">
-        <p>📌 <strong>付款說明：</strong></p>
-        <ul className="list-disc list-inside mt-1 space-y-1">
-          <li>請使用 Alipay（香港）或 PayPal 付款。</li>
-          <li>上傳付款截圖時，請務必填寫你的<strong>姓名</strong>與<strong>聯絡方式</strong>。</li>
-          <li>本人將於 <strong>24 小時內</strong>開通點數，如遇週末或深夜略有延遲 🙏。</li>
+      {/* 付款方式說明區塊 */}
+      <div className="bg-yellow-50 border border-yellow-300 text-sm text-yellow-800 rounded-md p-4">
+        <p className="font-semibold mb-2">📌 付款說明：</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>請使用 Alipay（香港） 或 PayPal 付款。</li>
+          <li>上傳付款截圖時，請務必填寫你的姓名與聯絡方式。</li>
+          <li>本人將於 <strong>24 小時內</strong> 開通點數，如遇週末或深夜略有延遲 🙏。</li>
           <li>若有推薦碼，請填寫以獲得額外點數。</li>
         </ul>
       </div>
 
-      {/* 表單區塊 */}
+      {/* 表單輸入區域 */}
       <Input placeholder="你的姓名" value={name} onChange={(e) => setName(e.target.value)} />
       <Input placeholder="聯絡方式（微信 / WhatsApp）" value={contact} onChange={(e) => setContact(e.target.value)} />
       <Input placeholder="推薦碼（可選）" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} />
-      <Input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <Input type="file" accept="image/*" onChange={(e) => {
+        const file = e.target.files?.[0] || null;
+        setFile(file);
+        setPreviewUrl(file ? URL.createObjectURL(file) : null);
+      }} />
 
-      {file && typeof window !== 'undefined' && (
+      {previewUrl && (
         <div className="flex justify-center">
-          <img src={URL.createObjectURL(file)} alt="預覽圖" width={200} height={200} className="rounded-lg" />
+          <img src={previewUrl} alt="預覽圖" className="rounded-lg mt-2 max-w-[200px]" />
         </div>
       )}
 
@@ -149,7 +159,8 @@ export default function RechargeContent() {
         📤 提交付款資料
       </Button>
 
-      {success && <p className="text-green-600 mt-4">✅ 上傳成功！請等待人工開通</p>}
+      {success === true && <p className="text-green-600">✅ 上傳成功！請等待人工開通</p>}
+      {success === false && <p className="text-red-500">❌ 上傳失敗，請稍後再試</p>}
     </div>
   );
 }
