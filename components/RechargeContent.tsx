@@ -11,6 +11,13 @@ export default function RechargeContent() {
   const router = useRouter();
   const [skipLogin, setSkipLogin] = useState<boolean | null>(null);
 
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const skip = localStorage.getItem('skipLogin') === 'true';
@@ -31,13 +38,6 @@ export default function RechargeContent() {
       </div>
     );
   }
-
-  const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
-  const [referralCode, setReferralCode] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleUpload = async () => {
     if (!name || !contact || !file) {
