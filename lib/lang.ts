@@ -5,24 +5,27 @@ import { useState } from 'react';
 
 export type Lang = 'zh-TW' | 'zh-CN' | 'en';
 
+/** 繁體 → 簡體 */
 export function toSimplified(text: string): string {
   try {
-    return zhConvert.t2s(text);
+    return zhConvert.t2s(text); // ✅ 正確寫法
   } catch (e) {
     console.error('[繁轉簡錯誤]', e);
     return text;
   }
 }
 
+/** 簡體 → 繁體 */
 export function toTraditional(text: string): string {
   try {
-    return zhConvert.s2t(text);
+    return zhConvert.s2t(text); // ✅ 正確寫法
   } catch (e) {
     console.error('[簡轉繁錯誤]', e);
     return text;
   }
 }
 
+/** 中文翻譯英文 */
 export async function toEnglish(text: string): Promise<string> {
   try {
     const res = await fetch(
@@ -37,6 +40,7 @@ export async function toEnglish(text: string): Promise<string> {
   }
 }
 
+/** 語言切換 Hook */
 export function useLang() {
   const [lang, setLang] = useState<Lang>('zh-TW');
   const toggleLang = () => {
