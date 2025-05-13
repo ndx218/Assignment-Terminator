@@ -1,6 +1,6 @@
 'use client';
 
-import zhConvert from 'zh-convert'; // ✅ default 匯入整個物件
+import zhConvert from 'zh-convert';
 import { useState } from 'react';
 
 export type Lang = 'zh-TW' | 'zh-CN' | 'en';
@@ -8,7 +8,7 @@ export type Lang = 'zh-TW' | 'zh-CN' | 'en';
 /** 繁體 → 簡體 */
 export function toSimplified(text: string): string {
   try {
-    return zhConvert.convert(text, { from: 'zh-TW', to: 'zh-CN' });
+    return zhConvert.t2s(text); // ✅ 正確寫法
   } catch (e) {
     console.error('[繁轉簡錯誤]', e);
     return text;
@@ -18,7 +18,7 @@ export function toSimplified(text: string): string {
 /** 簡體 → 繁體 */
 export function toTraditional(text: string): string {
   try {
-    return zhConvert.convert(text, { from: 'zh-CN', to: 'zh-TW' });
+    return zhConvert.s2t(text); // ✅ 正確寫法
   } catch (e) {
     console.error('[簡轉繁錯誤]', e);
     return text;
