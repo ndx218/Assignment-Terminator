@@ -10,8 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: true,
         name: true,
         phone: true,
-        imageUrl: true,
         referralCode: true,
+        imageUrl: true,
         createdAt: true,
       },
     });
