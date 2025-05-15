@@ -1,12 +1,12 @@
-// ✅ /pages/api/upload-payment.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import formidable, { File } from 'formidable';
 import fs from 'fs';
 import path from 'path';
+import { prisma } from '@/lib/prisma'; // ✅ 加這行
 
 export const config = {
   api: {
-    bodyParser: false, // 禁用 Next.js 自帶 body parser，因為要用 formidable
+    bodyParser: false,
   },
 };
 
@@ -41,15 +41,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const filename = `${timestamp}_${original}`;
       const filepath = path.join(uploadDir, filename);
 
-      // ✅ 儲存截圖
       fs.copyFileSync(screenshot.filepath, filepath);
 
-      console.log('[📤 新付款上傳]', {
-        name,
-        phone,
-        referralCode,
-        filePath: `/uploads/${filename}`,
+      // ✅ 寫入資料庫
+      await prisma.topUpSubmission.create({
+        data: {
+          name,
+          phone,
+          referralCode,
+          imageUrl: `/uploads/${filename}`,
+        },
       });
+
+      console.log('[📤 新付款上傳]', { name, phone, referralCode, filePath: `/uploads/${filename}` });
 
       return res.status(200).json({ message: '上傳成功' });
     } catch (error) {
