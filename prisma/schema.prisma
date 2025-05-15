@@ -58,3 +58,12 @@ model Transaction {
   isFirstTopUp Boolean  @default(false)
   createdAt    DateTime @default(now())
 }
+
+model TopUpSubmission {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String
+  referralCode String?
+  imageUrl     String
+  createdAt    DateTime @default(now())
+}
