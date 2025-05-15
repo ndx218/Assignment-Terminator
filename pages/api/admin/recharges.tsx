@@ -1,66 +1,31 @@
-// pages/admin/recharges.tsx
+// pages/api/admin/recharges.ts
+import { NextApiRequest, NextApiResponse } from 'next';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../auth/[...nextauth]';
+import prisma from '@/lib/prisma';
 
-'use client';
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const session = await getServerSession(req, res, authOptions);
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/router';
+  // ✅ 僅允許特定管理員帳號查看（可自定義 email 白名單）
+  const allowedAdmins = ['44444death@gmail.com'];
+  if (!session || !allowedAdmins.includes(session.user?.email || '')) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
 
-export default function AdminRechargesPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // ✅ 僅允許 GET 方法
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-  useEffect(() => {
-    if (status === 'loading') return;
-    if (session?.user?.email !== '44444death@gmail.com') {
-      router.push('/');
-    }
-  }, [session, status]);
+  try {
+    const records = await prisma.paymentRecord.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/admin/recharges');
-        const json = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error('Error loading recharges:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  if (loading) return <div className="p-4">🔄 載入中...</div>;
-
-  return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">🧾 充值申請紀錄（後台）</h1>
-      <table className="w-full border border-gray-300 text-sm">
-        <thead className="bg-gray-100">
-          <tr>
-            <th className="border px-3 py-2">姓名</th>
-            <th className="border px-3 py-2">聯絡方式</th>
-            <th className="border px-3 py-2">上傳時間</th>
-            <th className="border px-3 py-2">截圖</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((entry) => (
-            <tr key={entry.id}>
-              <td className="border px-3 py-2">{entry.name}</td>
-              <td className="border px-3 py-2">{entry.phone}</td>
-              <td className="border px-3 py-2">{new Date(entry.createdAt).toLocaleString()}</td>
-              <td className="border px-3 py-2">
-                <img src={entry.screenshotUrl} alt="截圖" className="w-32 rounded" />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+    res.status(200).json(records);
+  } catch (error) {
+    console.error('Fetch error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 }
