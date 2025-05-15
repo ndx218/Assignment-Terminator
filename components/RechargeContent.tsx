@@ -18,6 +18,7 @@ export default function RechargeContent() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState<boolean | null>(null);
+  const [records, setRecords] = useState<any[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -32,9 +33,17 @@ export default function RechargeContent() {
     }
   }, [skipLogin, status]);
 
-  if (skipLogin === null || (!skipLogin && status === 'loading')) {
-    return <div className="h-screen flex items-center justify-center text-gray-500">⏳ 載入中...</div>;
-  }
+  useEffect(() => {
+    // Mock: 後台載入充值紀錄
+    setRecords([
+      {
+        name: '小明',
+        contact: 'WeChat123',
+        time: '2025-05-13 17:30',
+        img: '/sample-payment.png',
+      },
+    ]);
+  }, []);
 
   const handleUpload = async () => {
     if (!name || !contact || !file) {
@@ -72,8 +81,12 @@ export default function RechargeContent() {
     }
   };
 
+  if (skipLogin === null || (!skipLogin && status === 'loading')) {
+    return <div className="h-screen flex items-center justify-center text-gray-500">⏳ 載入中...</div>;
+  }
+
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-8">
+    <div className="max-w-4xl mx-auto p-6 space-y-8">
       <h2 className="text-2xl font-bold">💳 點數充值</h2>
 
       {/* 套餐表格 */}
@@ -128,7 +141,7 @@ export default function RechargeContent() {
         </table>
       </div>
 
-      {/* 付款方式說明區塊 */}
+      {/* 付款說明 */}
       <div className="bg-yellow-50 border border-yellow-300 text-sm text-yellow-800 rounded-md p-4">
         <p className="font-semibold mb-2">📌 付款說明：</p>
         <ul className="list-disc pl-5 space-y-1">
@@ -137,6 +150,18 @@ export default function RechargeContent() {
           <li>本人將於 <strong>24 小時內</strong> 開通點數，如遇週末或深夜略有延遲 🙏。</li>
           <li>若有推薦碼，請填寫以獲得額外點數。</li>
         </ul>
+      </div>
+
+      {/* 付款方式 */}
+      <div className="text-sm space-y-2">
+        <div>
+          <strong>📱 Alipay（香港）：</strong>
+          <img src="/alipay-qr.png" alt="Alipay QR" width={180} height={180} className="mt-2" />
+        </div>
+        <div>
+          <strong>🌐 PayPal：</strong>
+          <a href="https://www.paypal.com/paypalme/TamChakFung" target="_blank" className="text-blue-600 underline ml-1">https://www.paypal.com/paypalme/TamChakFung</a>
+        </div>
       </div>
 
       {/* 表單輸入區域 */}
@@ -161,6 +186,33 @@ export default function RechargeContent() {
 
       {success === true && <p className="text-green-600">✅ 上傳成功！請等待人工開通</p>}
       {success === false && <p className="text-red-500">❌ 上傳失敗，請稍後再試</p>}
+
+      {/* 查看充值紀錄區塊 */}
+      <div className="mt-10">
+        <h3 className="text-lg font-semibold mb-2">🧑‍💻 充值申請紀錄（模擬）</h3>
+        <table className="w-full border text-sm">
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="border px-2 py-1">姓名</th>
+              <th className="border px-2 py-1">聯絡方式</th>
+              <th className="border px-2 py-1">時間</th>
+              <th className="border px-2 py-1">截圖</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((r, i) => (
+              <tr key={i}>
+                <td className="border px-2 py-1">{r.name}</td>
+                <td className="border px-2 py-1">{r.contact}</td>
+                <td className="border px-2 py-1">{r.time}</td>
+                <td className="border px-2 py-1">
+                  <img src={r.img} alt="截圖" className="w-20 h-auto rounded" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
