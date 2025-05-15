@@ -4,8 +4,16 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const records = await prisma.rechargeRecord.findMany({
+    const records = await prisma.topUpSubmission.findMany({
       orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        imageUrl: true,
+        referralCode: true,
+        createdAt: true,
+      },
     });
 
     return res.status(200).json({ data: records });
