@@ -1,3 +1,4 @@
+// ✅ pages/Login.tsx
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -9,7 +10,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ✅ 自動跳轉：登入成功 or 手動跳過登入
   useEffect(() => {
     const skip = localStorage.getItem('skipLogin') === 'true';
     if (skip) {
@@ -18,8 +18,8 @@ export default function LoginPage() {
     }
 
     if (status === 'loading') return;
-    if (session?.user) {
-      showSuccess('login');
+    if (session?.user && router.pathname === '/Login') {
+      showSuccess('登入成功');
       router.replace('/');
     }
   }, [session, status]);
@@ -27,7 +27,7 @@ export default function LoginPage() {
   const handleEmailSignIn = async () => {
     setLoading(true);
     const res = await signIn('email', { email, redirect: false });
-    res?.ok ? showSuccess('email') : showError('email');
+    res?.ok ? showSuccess('已寄出登入連結') : showError('登入失敗，請確認 Email');
     setLoading(false);
   };
 
@@ -39,7 +39,7 @@ export default function LoginPage() {
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
-        正在驗證登入狀態...
+        ⏳ 正在驗證登入狀態...
       </div>
     );
   }
@@ -71,7 +71,7 @@ export default function LoginPage() {
             disabled={loading || !email}
             className="w-full bg-black text-white py-2 rounded-xl hover:bg-gray-800 disabled:opacity-50"
           >
-            發送登入連結
+            📩 發送登入連結
           </button>
         </div>
 
