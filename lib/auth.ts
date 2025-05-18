@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
 
   // ✅ 自定義登入頁面（請確保頁面為 `/pages/Login.tsx`）
   pages: {
-    signIn: '/Login',
+    signIn: '/login',
   },
 
   session: {
