@@ -17,7 +17,7 @@ export default function LoginPage() {
     }
 
     if (status === 'loading') return;
-    if (session?.user && router.pathname === '/Login') {
+    if (session?.user && router.pathname === '/login') {
       showSuccess('login');
       router.replace('/');
     }
