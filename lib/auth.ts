@@ -28,17 +28,19 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
 
+  // ✅ 自定義登入頁面（請確保頁面為 `/pages/Login.tsx`）
   pages: {
-    signIn: '/login', // 導向自定義登入頁面
+    signIn: '/Login',
   },
 
   session: {
     strategy: 'jwt',
-    maxAge: 365 * 24 * 60 * 60,
-    updateAge: 30 * 24 * 60 * 60,
+    maxAge: 365 * 24 * 60 * 60, // 1年
+    updateAge: 30 * 24 * 60 * 60, // 每30天更新一次
   },
 
   callbacks: {
+    // ✅ JWT 記錄額外欄位
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
@@ -49,6 +51,7 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
 
+    // ✅ 將 token 中的自定欄位放到 session.user 上
     async session({ session, token }: { session: Session; token: JWT }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
@@ -59,6 +62,7 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
 
+    // ✅ 登入時自動補齊 DB 欄位
     async signIn({ user }) {
       const dbUser = await prisma.user.findUnique({
         where: { email: user.email ?? undefined },
