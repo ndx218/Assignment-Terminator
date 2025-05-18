@@ -1,4 +1,3 @@
-// ✅ pages/Login.tsx
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -19,7 +18,7 @@ export default function LoginPage() {
 
     if (status === 'loading') return;
     if (session?.user && router.pathname === '/Login') {
-      showSuccess('登入成功');
+      showSuccess('login');
       router.replace('/');
     }
   }, [session, status]);
@@ -27,7 +26,7 @@ export default function LoginPage() {
   const handleEmailSignIn = async () => {
     setLoading(true);
     const res = await signIn('email', { email, redirect: false });
-    res?.ok ? showSuccess('已寄出登入連結') : showError('登入失敗，請確認 Email');
+    res?.ok ? showSuccess('email') : showError('email');
     setLoading(false);
   };
 
