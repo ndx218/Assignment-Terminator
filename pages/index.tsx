@@ -1,4 +1,3 @@
-// ✅ pages/index.tsx
 'use client';
 
 import { useSession } from 'next-auth/react';
@@ -20,9 +19,15 @@ export default function HomePage() {
 
   useEffect(() => {
     if (skipLogin === false && status === 'unauthenticated') {
-      router.push('/login');
+      router.replace('/login');
     }
   }, [status, router, skipLogin]);
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      console.log('✅ 已登入:', session?.user?.email);
+    }
+  }, [status, session]);
 
   if (skipLogin === null || (!skipLogin && status === 'loading')) {
     return (
