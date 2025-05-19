@@ -25,7 +25,11 @@ export default function LoginPage() {
 
   const handleEmailSignIn = async () => {
     setLoading(true);
-    const res = await signIn('email', { email, redirect: false });
+    const res = await signIn('email', {
+      email,
+      redirect: false,
+      callbackUrl: 'https://assignment-terminator-indol.vercel.app/',
+    });
     res?.ok ? showSuccess('email') : showError('email');
     setLoading(false);
   };
