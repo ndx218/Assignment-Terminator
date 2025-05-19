@@ -28,37 +28,48 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
-    signIn: '/login', // ✅ 確保為小寫
+    signIn: '/login', // ✅ 小寫
   },
 
   session: {
     strategy: 'jwt',
     maxAge: 365 * 24 * 60 * 60, // 1年
-    updateAge: 30 * 24 * 60 * 60, // 每30天更新一次
+    updateAge: 30 * 24 * 60 * 60,
   },
 
+  // ✅ 整合後的完整 callbacks
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
+      console.log('🔥 jwt callback triggered', { token, user, account });
+
       if (user) {
-        token.sub = user.id;
+        token.id = user.id;
+        token.email = user.email;
         token.phone = (user as any).phone ?? null;
         token.referredBy = (user as any).referredBy ?? null;
         token.referralCode = (user as any).referralCode ?? null;
       }
+
       return token;
     },
 
     async session({ session, token }: { session: Session; token: JWT }) {
-      if (session.user && token.sub) {
-        session.user.id = token.sub;
+      console.log('🧠 session callback triggered', { session, token });
+
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.email = token.email as string;
         session.user.phone = token.phone ?? null;
         session.user.referredBy = token.referredBy ?? null;
         session.user.referralCode = token.referralCode ?? null;
       }
+
       return session;
     },
 
     async signIn({ user }) {
+      console.log('✅ signIn callback triggered', { user });
+
       const dbUser = await prisma.user.findUnique({
         where: { email: user.email ?? undefined },
       });
@@ -72,15 +83,20 @@ export const authOptions: NextAuthOptions = {
       return true;
     },
 
-    // ✅ 解決大小寫錯誤的 callbackUrl 問題
     redirect({ url, baseUrl }) {
-      // 如果 callback URL 包含大小寫錯誤的 /Login → 修正為首頁
+      console.log('🚨 redirect callback triggered', { url, baseUrl });
+
+      // 防止大小寫錯誤 fallback 到 login 頁
       if (url.toLowerCase().includes('/login')) {
         return baseUrl;
       }
+
       return url.startsWith(baseUrl) ? url : baseUrl;
     },
   },
+
+  // ✅ 防止 cookie 在 Vercel 被擋掉
+  useSecureCookies: true,
 };
 
 export default authOptions;
