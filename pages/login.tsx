@@ -16,8 +16,7 @@ export default function LoginPage() {
       return;
     }
 
-    if (status === 'loading') return;
-    if (session?.user && router.pathname === '/login') {
+    if (status === 'authenticated' && router.pathname === '/login') {
       showSuccess('login');
       router.replace('/');
     }
@@ -32,6 +31,12 @@ export default function LoginPage() {
     });
     res?.ok ? showSuccess('email') : showError('email');
     setLoading(false);
+  };
+
+  const handleGoogleSignIn = () => {
+    signIn('google', {
+      callbackUrl: 'https://assignment-terminator-indol.vercel.app/',
+    });
   };
 
   const handleSkipLogin = () => {
@@ -53,7 +58,7 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-center">登入 Assignment Terminator</h1>
 
         <button
-          onClick={() => signIn('google')}
+          onClick={handleGoogleSignIn}
           className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-xl transition"
         >
           使用 Google 登入
