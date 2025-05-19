@@ -28,16 +28,29 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 
   pages: {
-    signIn: '/login', // ✅ 小寫
+    signIn: '/login', // ✅ 小寫 login 頁面
   },
 
   session: {
     strategy: 'jwt',
     maxAge: 365 * 24 * 60 * 60, // 1年
-    updateAge: 30 * 24 * 60 * 60,
+    updateAge: 30 * 24 * 60 * 60, // 每30天刷新
   },
 
-  // ✅ 整合後的完整 callbacks
+  useSecureCookies: true, // ✅ 生效 __Secure- cookie 名稱
+
+  cookies: {
+    sessionToken: {
+      name: '__Secure-next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+      },
+    },
+  },
+
   callbacks: {
     async jwt({ token, user, account }) {
       console.log('🔥 jwt callback triggered', { token, user, account });
@@ -94,9 +107,6 @@ export const authOptions: NextAuthOptions = {
       return url.startsWith(baseUrl) ? url : baseUrl;
     },
   },
-
-  // ✅ 防止 cookie 在 Vercel 被擋掉
-  useSecureCookies: true,
 };
 
 export default authOptions;
