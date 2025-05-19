@@ -10,6 +10,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    console.log('🔍 status:', status);
+    console.log('👤 session:', session);
+
     const skip = localStorage.getItem('skipLogin') === 'true';
     if (skip) {
       router.replace('/');
