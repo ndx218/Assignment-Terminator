@@ -1,17 +1,18 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '@/lib/prisma'; // 确保您的 Prisma Client 导入路径正确
+import { prisma } from '@/lib/prisma'; // 关键修改：使用命名导入
 import { serialize } from 'cookie';
-import { sign } from 'jsonwebtoken'; // 通常用于创建JWT session，如果您使用NextAuth.js，可能不需要手动管理
-import { getToken } from 'next-auth/jwt'; // 引入getToken，如果您使用NextAuth.js的JWT策略
+import { sign } from 'jsonwebtoken';
 
 // 确保您的 NEXTAUTH_SECRET 在 .env.local 中定义
 const JWT_SECRET = process.env.NEXTAUTH_SECRET;
 
 if (!JWT_SECRET) {
-  throw new Error('NEXTAUTH_SECRET is not defined in environment variables.');
+  // 在生产环境中，如果缺少密钥，应直接阻止应用启动
+  console.error('Environment variable NEXTAUTH_SECRET is not defined. This is crucial for JWT signing.');
+  // 可以选择抛出错误，或者返回一个错误响应来处理这种情况
+  // throw new Error('NEXTAUTH_SECRET is not defined.');
 }
 
-// 假设这是您的电话验证流程，它会生成一个sessionToken并设置cookie
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
@@ -21,6 +22,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (!phone || !code) {
     return res.status(400).json({ message: 'Phone and code are required.' });
+  }
+
+  // 再次检查 JWT_SECRET，以防在其他环境中运行而未抛出错误
+  if (!JWT_SECRET) {
+    return res.status(500).json({ message: 'Server configuration error: NEXTAUTH_SECRET is missing.' });
   }
 
   try {
@@ -33,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ message: 'Invalid or expired verification code.' });
     }
 
-    // 可选：删除已使用的验证码
+    // 可选：删除已使用的验证码，防止重复使用
     await prisma.verificationCode.delete({
       where: { phone },
     });
@@ -50,46 +56,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           phone,
           // 如果您希望新注册用户有默认的积分或推荐码，可以在这里设置
           credits: 0,
+          // name: '新用户', // 示例：可以设置一个默认名称
+          // email: `${phone}@example.com`, // 示例：如果需要唯一邮箱，可以生成一个
           // referralCode: 'generate_a_unique_code_here', // 示例：生成一个
         },
       });
     }
 
-    // 3. 生成 Session Token (与 NextAuth.js 兼容)
-    // NextAuth.js 的 `sessionToken` 应该是一个安全的、唯一的字符串。
-    // 通常 NextAuth.js 会为您生成这个，但如果您在自定义登录流中需要它，
-    // 您可以使用 NextAuth.js 内部的 `createToken` 或手动生成一个足够安全的 UUID/CUID。
-    // 这里我们直接使用一个 CUID 作为 sessionToken
-    const sessionToken = await prisma.session.create({
+    // 3. 生成 Session Token 并创建 Session 记录
+    // 这里我们使用 `jsonwebtoken` 来生成一个 JWT 作为 sessionToken 的值。
+    // 这与 NextAuth.js 内部在 JWT 会话策略下的行为类似，并确保 `sessionToken` 是唯一的。
+    const sessionTokenValue = sign(
+      { userId: user.id, phone: user.phone }, // JWT Payload
+      JWT_SECRET, // 签名密钥
+      { expiresIn: '30d' } // Token 有效期
+    );
+
+    // 计算 Session 的过期时间 (当前时间 + 30天)
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30);
+
+    // 在 Prisma Session 表中创建记录
+    await prisma.session.create({
       data: {
+        sessionToken: sessionTokenValue, // 关键：使用正确的字段名
         userId: user.id,
-        // NextAuth.js Session 模型需要 expires 字段
-        // 设置一个合理的过期时间，例如 30 天
-        expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30), // 30天后过期
-        // sessionToken 字段需要一个唯一值。我们可以使用 Prisma 的 cuid() 或 uuid()
-        // 但为了保持与 NextAuth.js 的 Prisma 适配器行为一致，
-        // 这里的 `sessionToken` 应该是一个独立的、唯一的字符串，而不是直接使用 `cuid()` 作为记录 ID。
-        // NextAuth.js 内部通常会生成一个 JWT 作为 sessionToken。
-        // 如果您的 NextAuth.js 配置是数据库会话策略，那么它会期望这里直接创建一个数据库 Session 记录。
-        // 在这里，为了解决编译错误，我们将其修正为 `sessionToken` 字段。
-        // 关键是，这个 `sessionToken` 的值需要是唯一的。
-        // 简单的做法是，如果您的 NextAuth.js 适配器负责管理 Sessions，
-        // 这个 `verify-code.ts` 文件可能不应该直接创建 `Session` 记录，
-        // 而是应该通过 `signIn` 回调或 `jwt` 回调来处理。
-        //
-        // 考虑到您遇到的编译错误，最直接的修复是确保 `data` 对象的字段名匹配。
-        // 如果您希望手动生成一个用于会话的令牌，可以使用 `sign` 函数来生成一个 JWT。
-        sessionToken: sign({ userId: user.id, phone: user.phone }, JWT_SECRET, { expiresIn: '30d' }), // 使用JWT作为sessionToken
+        expires: expiresAt, // 关键：提供 expires 字段
       },
-    }).then(session => session.sessionToken); // 获取新创建的 sessionToken
+    });
 
     // 4. 设置 HttpOnly Cookie
-    res.setHeader('Set-Cookie', serialize('next-auth.session-token', sessionToken, {
-      httpOnly: true,
+    // NextAuth.js 的默认 cookie 名称是 'next-auth.session-token'
+    res.setHeader('Set-Cookie', serialize('next-auth.session-token', sessionTokenValue, {
+      httpOnly: true, // 防止客户端 JavaScript 访问
       secure: process.env.NODE_ENV === 'production', // 仅在生产环境使用 HTTPS
-      maxAge: 60 * 60 * 24 * 30, // 30天
-      path: '/',
-      sameSite: 'Lax', // 推荐使用 Lax 或 Strict
+      maxAge: 60 * 60 * 24 * 30, // 30 天，与 session expires 匹配
+      path: '/', // cookie 对所有路径都有效
+      sameSite: 'Lax', // 推荐使用 Lax 或 Strict 以防止 CSRF 攻击
     }));
 
     // 5. 返回成功响应和用户信息
@@ -97,6 +99,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    // 根据错误的具体类型，可以返回更详细的错误信息
+    if (error instanceof Error) {
+      return res.status(500).json({ message: 'Internal server error', error: error.message });
+    }
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
