@@ -8,6 +8,7 @@ generator client {
 }
 
 // NextAuth.js User Model
+// 包含 NextAuth.js 适配器期望的字段，以及您的自定义字段
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -15,7 +16,7 @@ model User {
   emailVerified DateTime? // NextAuth.js requires this for email verification flows
   image         String?   // NextAuth.js uses this for user avatars/profile pictures
 
-  // Your custom fields
+  // Your custom fields (保留不变)
   phone         String?   @unique
   credits       Int       @default(0)
   referredBy    String?
@@ -25,28 +26,29 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // NextAuth.js relations
-  accounts      Account[] // Link to the Account model for OAuth/credentials
-  sessions      Session[] // Link to the Session model for user sessions
+  accounts      Account[] // Link to the Account model for OAuth/credentials (已添加)
+  sessions      Session[] // Link to the Session model for user sessions (已保留，但需要与新Session模型匹配)
 
-  // Your custom relations
+  // Your custom relations (保留不变)
   referralsMade Referral[] @relation("Referrer")
   referralsGot  Referral[] @relation("Referee")
   transactions  Transaction[]
 }
 
-// NextAuth.js Account Model (Crucial for OAuth/credentials)
+// NextAuth.js Account Model (OAuth/credentials 的关键)
+// 包含 NextAuth.js 适配器期望的所有字段
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text // Use @db.Text for potentially long tokens
-  access_token      String? @db.Text // Use @db.Text for potentially long tokens
+  refresh_token     String? @db.Text // 使用 @db.Text 防止长 token 溢出
+  access_token      String? @db.Text // 使用 @db.Text 防止长 token 溢出
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text // Use @db.Text for potentially long tokens
+  id_token          String? @db.Text // 使用 @db.Text 防止长 token 溢出
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -55,15 +57,20 @@ model Account {
 }
 
 // NextAuth.js Session Model
+// 已调整为 NextAuth.js 期望的 `sessionToken` 和 `expires` 字段
 model Session {
   id           String    @id @default(cuid())
-  sessionToken String    @unique // NextAuth.js uses sessionToken
+  sessionToken String    @unique // **关键修改：将 'token' 改为 'sessionToken'**
   userId       String
-  expires      DateTime
+  expires      DateTime  // **关键修改：添加 'expires' 字段，NextAuth.js 需要**
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // `createdAt` 字段通常不包含在 NextAuth.js 的标准 Session 模型中，
+  // 因为 `expires` 字段已经处理了会话有效期。
+  // 如果您确实需要，可以自行添加，但请确保与您的代码逻辑一致。
+  // createdAt    DateTime @default(now())
 }
 
-// NextAuth.js Verification Token Model (for email sign-in/verification)
+// NextAuth.js Verification Token Model (用于邮箱验证登录等)
 model VerificationToken {
   identifier String
   token      String   @unique
@@ -72,8 +79,10 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Your existing custom models (retained as is)
-model VerificationCode { // Assuming this is for phone verification, separate from NextAuth.js Email
+// 您的现有自定义模型 (保持不变，与 NextAuth.js 核心模型分离)
+
+// 手机验证码模型 (与 NextAuth.js 的 VerificationToken 区分)
+model VerificationCode {
   phone     String   @id
   code      String
   createdAt DateTime @default(now())
