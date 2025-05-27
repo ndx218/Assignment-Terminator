@@ -7,6 +7,12 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// 定义用户角色枚举
+enum UserRole {
+  USER  // 普通用户
+  ADMIN // 管理员
+}
+
 // NextAuth.js User Model
 // 包含 NextAuth.js 适配器期望的字段，以及您的自定义字段
 model User {
@@ -24,6 +30,7 @@ model User {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  role          UserRole  @default(USER) // <-- 新增的 role 字段，默认是 USER
 
   // NextAuth.js relations
   accounts      Account[] // Link to the Account model for OAuth/credentials (已添加)
