@@ -1,16 +1,20 @@
+// pages/admin.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button'; // 假设您有一个带有 isLoading 属性的 Button 组件
+import { Button } from '@/components/ui/button';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/router'; // 确保这里是 'next/router'
+import { useRouter } from 'next/router';
 
 interface Transaction {
   id: string;
   amount: number;
   isFirstTopUp: boolean;
   createdAt: string;
+  // ✅ 添加 type 和 description 字段
+  type?: string;
+  description?: string;
 }
 
 export default function AdminPage() {
@@ -26,15 +30,12 @@ export default function AdminPage() {
   // ✅ 管理员授权检查
   useEffect(() => {
     if (status === 'loading') {
-      // 会话还在加载中，不执行任何操作
       return;
     }
 
-    // 如果没有会话（未登录），或者会话存在但用户的角色不是 'ADMIN'，则重定向到主页
-    // 确保您的 next-auth.d.ts 中扩展了 Session.user 包含 role
     if (!session || session.user?.role !== 'ADMIN') {
       console.warn('Attempted access to admin page without ADMIN role. Redirecting.');
-      router.replace('/'); // 重定向到主页
+      router.replace('/');
     }
   }, [status, session, router]);
 
@@ -59,8 +60,8 @@ export default function AdminPage() {
 
       if (res.ok) {
         setMessage(`✅ ${data.message}`);
-        setEmail(''); // 清空邮箱输入框
-        setPoints(''); // 清空点数输入框
+        setEmail('');
+        setPoints('');
         fetchTransactions(); // 重新查询记录
       } else {
         setMessage(`❌ 錯誤：${data.error || '未知錯誤'}`);
@@ -75,10 +76,10 @@ export default function AdminPage() {
   const fetchTransactions = async () => {
     if (!email) {
       setMessage('請先輸入 Email 以查詢紀錄');
-      setTransactions([]); // 清空之前的记录
+      setTransactions([]);
       return;
     }
-    setLoading(true); // 可以为查询也添加 loading 状态，或者单独一个
+    setLoading(true);
     setMessage('');
 
     try {
@@ -91,7 +92,7 @@ export default function AdminPage() {
         if (data.transactions.length === 0) {
             setMessage(`沒有找到 ${email} 的交易紀錄。`);
         } else {
-            setMessage(''); // 清除之前的消息
+            setMessage('');
         }
       } else {
         setMessage(`❌ 錯誤：${data.error || '查詢失敗'}`);
@@ -104,7 +105,6 @@ export default function AdminPage() {
     }
   };
 
-  // 如果会话正在加载中，或用户不是管理员，显示加载或访问拒绝状态
   if (status === 'loading' || (!session && status !== 'unauthenticated') || (session && session.user?.role !== 'ADMIN')) {
     return (
       <div className="h-screen flex items-center justify-center text-gray-500">
@@ -113,11 +113,9 @@ export default function AdminPage() {
     );
   }
 
-  // 确保 session 和 role 存在且是 ADMIN 才能渲染页面
   if (!session || session.user?.role !== 'ADMIN') {
-      return null; // 或者重定向，因为 useEffect 已经处理了重定向
+      return null;
   }
-
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
@@ -127,7 +125,7 @@ export default function AdminPage() {
         placeholder="使用者 Email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        type="email" // 确保邮箱格式
+        type="email"
       />
       <Input
         placeholder="加幾點？"
@@ -149,9 +147,10 @@ export default function AdminPage() {
       </Button>
 
       <ul className="text-sm space-y-2">
+        {/* ✅ 修改这里以显示 email, type 和 description */}
         {transactions.map((tx) => (
           <li key={tx.id} className="border rounded p-2 bg-gray-50">
-            💰 {tx.amount} 點 - {tx.isFirstTopUp ? '首充' : '加值'} - {new Date(tx.createdAt).toLocaleString()}
+            ✉️ {email} - 💰 {tx.amount} 點 - {tx.type || (tx.isFirstTopUp ? '首充' : '加值')} {tx.description ? `(${tx.description})` : ''} - {new Date(tx.createdAt).toLocaleString()}
           </li>
         ))}
         {transactions.length === 0 && message.includes('沒有找到') ? (
