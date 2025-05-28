@@ -1,3 +1,4 @@
+// pages/index.tsx
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
@@ -26,6 +27,8 @@ export default function HomePage() {
   useEffect(() => {
     if (status === 'authenticated') {
       console.log('✅ 已登入:', session?.user?.email);
+      // 您可以在这里或者在渲染部分访问 session.user.credits
+      console.log('用户积分:', session?.user?.credits);
     }
   }, [status, session]);
 
@@ -43,6 +46,10 @@ export default function HomePage() {
         <div className="w-full bg-green-50 border-b border-green-200 p-4 flex justify-between items-center text-sm text-green-800">
           <div>
             👤 已登入：<span className="font-medium">{session.user?.email}</span>（ID: {session.user?.id}）
+            {/* ✅ 显示用户积分 */}
+            {session.user?.credits !== undefined && (
+              <span className="ml-4">✨ 積分：<span className="font-medium">{session.user.credits}</span> 點</span>
+            )}
           </div>
           <button
             onClick={() => {
@@ -56,7 +63,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* 主功能區域 */}
+      {/* 主功能区域 */}
       <div className="flex-1">
         <EasyWorkUI />
       </div>
