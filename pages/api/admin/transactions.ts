@@ -1,13 +1,16 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
-import authOptions from '../auth/[...nextauth]';
+// 您需要从 '@/lib/auth' 导入 authOptions，而不是 '../auth/[...nextauth]'
+import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import type { Session } from 'next-auth'; // ✅ 加入型別
+import type { Session } from 'next-auth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session: Session | null = await getServerSession(req, res, authOptions); // ✅ 加上型別保護
+  // 获取会话。getServerSession 的第三个参数是 authOptions
+  const session: Session | null = await getServerSession(req, res, authOptions);
 
-  if (!session || session.user?.email !== 'ndx218@gmail.com') {
+  // ✅ 关键修改：检查用户角色
+  if (!session || !session.user || session.user.role !== 'ADMIN') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
   }
 
@@ -37,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       email: user.email,
-      credits: user.credits,
+      credits: user.credits, // 也可以返回积分信息
       transactions: user.transactions.map((t) => ({
         id: t.id,
         amount: t.amount,
