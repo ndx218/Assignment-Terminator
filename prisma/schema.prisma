@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -22,7 +24,7 @@ model User {
   emailVerified DateTime? // NextAuth.js requires this for email verification flows
   image         String?   // NextAuth.js uses this for user avatars/profile pictures
 
-  // Your custom fields (保留不变)
+  // Your custom fields
   phone         String?   @unique
   credits       Int       @default(0)
   referredBy    String?
@@ -33,10 +35,10 @@ model User {
   role          UserRole  @default(USER) // <-- 新增的 role 字段，默认是 USER
 
   // NextAuth.js relations
-  accounts      Account[] // Link to the Account model for OAuth/credentials (已添加)
-  sessions      Session[] // Link to the Session model for user sessions (已保留，但需要与新Session模型匹配)
+  accounts      Account[] // Link to the Account model for OAuth/credentials
+  sessions      Session[] // Link to the Session model for user sessions
 
-  // Your custom relations (保留不变)
+  // Your custom relations
   referralsMade Referral[] @relation("Referrer")
   referralsGot  Referral[] @relation("Referee")
   transactions  Transaction[]
@@ -71,22 +73,18 @@ model Session {
   userId       String
   expires      DateTime  // **关键修改：添加 'expires' 字段，NextAuth.js 需要**
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // `createdAt` 字段通常不包含在 NextAuth.js 的标准 Session 模型中，
-  // 因为 `expires` 字段已经处理了会话有效期。
-  // 如果您确实需要，可以自行添加，但请确保与您的代码逻辑一致。
-  // createdAt    DateTime @default(now())
 }
 
 // NextAuth.js Verification Token Model (用于邮箱验证登录等)
 model VerificationToken {
   identifier String
-  token      String   @unique
+  token      String    @unique
   expires    DateTime
 
   @@unique([identifier, token])
 }
 
-// 您的现有自定义模型 (保持不变，与 NextAuth.js 核心模型分离)
+// 您的现有自定义模型
 
 // 手机验证码模型 (与 NextAuth.js 的 VerificationToken 区分)
 model VerificationCode {
@@ -107,19 +105,24 @@ model Referral {
 }
 
 model Transaction {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
   amount       Int
-  isFirstTopUp Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  isFirstTopUp Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  // ✅ 新增这两个字段，用于记录交易类型和描述
+  type         String    @default("GENERIC") // 例如："TOPUP", "ADMIN_TOPUP", "USAGE", "REFERRAL_BONUS"
+  description  String?   // 交易的详细描述，可选
+
+  @@index([userId])
 }
 
 model TopUpSubmission {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
   phone        String
   referralCode String?
   imageUrl     String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 }
