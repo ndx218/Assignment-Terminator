@@ -1,8 +1,7 @@
 // ✅ /pages/api/upload-payment.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { IncomingForm, File } from 'formidable';
-import fs from 'fs';
-import path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
 import { prisma } from '@/lib/prisma';
 
 export const config = {
@@ -16,13 +15,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: '只接受 POST 請求' });
   }
 
+  // 配置 Cloudinary
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+
   const form = new IncomingForm({ keepExtensions: true });
 
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error('[❌ 表單解析錯誤]', err);
-      return res.status(500).json({ error: '表單解析失敗' });
-    }
+  try {
+    const { fields, files } = await new Promise<{ fields: any; files: any }>((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) {
+          console.error('[❌ 表單解析錯誤]', err);
+          return reject(err);
+        }
+        resolve({ fields, files });
+      });
+    });
 
     const name = fields.name?.toString() || '';
     const phone = fields.phone?.toString() || '';
@@ -33,39 +44,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: '請填寫所有必填欄位' });
     }
 
-    try {
-      const uploadDir = path.join(process.cwd(), 'public/uploads');
-      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    // ✅ 上傳檔案到 Cloudinary
+    const result = await cloudinary.uploader.upload(screenshot.filepath, {
+      folder: 'recharge_screenshots',
+      public_id: `${Date.now()}_${screenshot.originalFilename || 'screenshot'}`,
+    });
 
-      const timestamp = Date.now();
-      const original = screenshot.originalFilename || 'screenshot.png';
-      const filename = `${timestamp}_${original}`;
-      const filepath = path.join(uploadDir, filename);
-
-      // ✅ 儲存截圖
-      fs.copyFileSync(screenshot.filepath, filepath);
-
-      // ✅ 儲存進資料庫
-      await prisma.topUpSubmission.create({
-        data: {
-          name,
-          phone,
-          referralCode,
-          imageUrl: `/uploads/${filename}`,
-        },
-      });
-
-      console.log('[📤 新付款上傳]', {
+    // ✅ 儲存進資料庫
+    await prisma.topUpSubmission.create({
+      data: {
         name,
         phone,
         referralCode,
-        filePath: `/uploads/${filename}`,
-      });
+        imageUrl: result.secure_url,
+        createdAt: new Date(),
+      },
+    });
 
-      return res.status(200).json({ message: '上傳成功' });
-    } catch (error) {
-      console.error('[❌ 儲存錯誤]', error);
-      return res.status(500).json({ error: '儲存失敗，請稍後再試' });
-    }
-  });
+    console.log('[📤 新付款上傳]', {
+      name,
+      phone,
+      referralCode,
+      imageUrl: result.secure_url,
+    });
+
+    return res.status(200).json({ message: '上傳成功', imageUrl: result.secure_url });
+  } catch (error) {
+    console.error('[❌ 儲存錯誤]', error);
+    return res.status(500).json({ error: '儲存失敗，請稍後再試' });
+  }
 }
