@@ -1,16 +1,14 @@
+// pages/api/admin/transactions.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
-// 您需要从 '@/lib/auth' 导入 authOptions，而不是 '../auth/[...nextauth]'
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import type { Session } from 'next-auth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // 获取会话。getServerSession 的第三个参数是 authOptions
   const session: Session | null = await getServerSession(req, res, authOptions);
 
-  // ✅ 关键修改：检查用户角色
-  if (!session || !session.user || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== 'ADMIN') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
   }
 
@@ -40,12 +38,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       email: user.email,
-      credits: user.credits, // 也可以返回积分信息
+      credits: user.credits,
       transactions: user.transactions.map((t) => ({
         id: t.id,
         amount: t.amount,
         isFirstTopUp: t.isFirstTopUp,
         createdAt: t.createdAt,
+        type: t.type,
+        description: t.description,
       })),
     });
   } catch (err) {
