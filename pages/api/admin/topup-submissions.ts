@@ -1,8 +1,7 @@
-// /pages/api/admin/topup-submissions.ts
 import { prisma } from '@/lib/prisma';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]'; // 根據你實際路徑調整
+import authOptions from '../auth/[...nextauth]'; // ✅ 改成 default 匯入
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getServerSession(req, res, authOptions);
@@ -17,4 +16,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.status(200).json(submissions);
 }
-
