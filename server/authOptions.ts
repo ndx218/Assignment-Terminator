@@ -15,14 +15,14 @@ export const authOptions: NextAuthOptions = {
     }),
     EmailProvider({
       server: {
-        host: process.env.EMAIL_SERVER_HOST,
-        port: Number(process.env.EMAIL_SERVER_PORT),
+        host: process.env.EMAIL_SERVER_HOST || '',
+        port: Number(process.env.EMAIL_SERVER_PORT) || 587,
         auth: {
-          user: process.env.EMAIL_SERVER_USER,
-          pass: process.env.EMAIL_SERVER_PASSWORD,
+          user: process.env.EMAIL_SERVER_USER || '',
+          pass: process.env.EMAIL_SERVER_PASSWORD || '',
         },
       },
-      from: process.env.EMAIL_FROM,
+      from: process.env.EMAIL_FROM || '',
     }),
   ],
 
@@ -84,14 +84,11 @@ export const authOptions: NextAuthOptions = {
       const dbUser = await prisma.user.findUnique({
         where: { email: user.email ?? undefined },
       });
-
       if (dbUser) {
         (user as any).phone = dbUser.phone ?? null;
         (user as any).referredBy = dbUser.referredBy ?? null;
         (user as any).referralCode = dbUser.referralCode ?? null;
-        // 不需要加 role/credits，這部分已在 jwt callback 處理
       }
-
       return true;
     },
 
