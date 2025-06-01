@@ -1,7 +1,7 @@
 // pages/admin/topup-submissions.tsx
 import { useEffect, useState } from 'react';
 
-type Submission = {
+type TopUpSubmission = {
   id: string;
   name: string;
   phone: string;
@@ -11,7 +11,7 @@ type Submission = {
 };
 
 export default function TopUpSubmissionsPage() {
-  const [records, setRecords] = useState<Submission[]>([]);
+  const [records, setRecords] = useState<TopUpSubmission[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -27,7 +27,7 @@ export default function TopUpSubmissionsPage() {
       .then(setRecords)
       .catch((err) => {
         console.error(err);
-        setError(err.message);
+        setError(err.message || '無法載入資料，請確認您的權限');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -35,9 +35,11 @@ export default function TopUpSubmissionsPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-4">
       <h1 className="text-2xl font-bold">📤 付款上傳紀錄</h1>
+
       {loading && <p className="text-gray-500">載入中...</p>}
       {error && <p className="text-red-600">{error}</p>}
       {!loading && records.length === 0 && <p className="text-gray-400">尚無資料</p>}
+
       <ul className="space-y-4">
         {records.map((r) => (
           <li key={r.id} className="p-4 border rounded bg-white shadow">
