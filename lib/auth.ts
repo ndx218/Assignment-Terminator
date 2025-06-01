@@ -1,11 +1,11 @@
 // lib/auth.ts
 import { getServerSession } from 'next-auth';
-import { authOptions as serverAuthOptions } from '@/server/authOptions';
+import { authOptions } from '@/server/authOptions';
 
 // 封裝 session 取得邏輯，其他 API route 可直接使用
 export function getAuthSession() {
-  return getServerSession(serverAuthOptions);
+  return getServerSession(authOptions);
 }
 
-// ✅ 重點：重新導出 authOptions 給其他地方用
-export const authOptions = serverAuthOptions;
+// ❌ 刪除下面這行 export，不要把 authOptions 暴露給前端
+// export const authOptions = serverAuthOptions;
