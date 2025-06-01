@@ -1,12 +1,9 @@
-// pages/api/admin/transactions.ts
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import type { Session } from 'next-auth';
+import { getAuthSession } from '@/lib/auth';
+import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session: Session | null = await getServerSession(req, res, authOptions);
+  const session = await getAuthSession();
 
   if (!session || session.user.role !== 'ADMIN') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
