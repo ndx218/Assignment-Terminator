@@ -1,4 +1,4 @@
-// pages/admin/topup‐submissions.tsx
+// pages/admin/topup-submissions.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -14,19 +14,19 @@ type TopUpSubmission = {
 
 export default function AdminTopUpsPage() {
   const [subs, setSubs] = useState<TopUpSubmission[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/admin/topup‐submissions')
+    fetch('/api/admin/topup-submissions')  // ✅ 这里必须是 ASCII dash U+002D
       .then(async (res) => {
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || '未知錯誤');
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Unknown error');
         }
         return res.json();
       })
-      .then((data) => {
+      .then((data: TopUpSubmission[]) => {
         setSubs(data);
       })
       .catch((e) => {
@@ -55,14 +55,16 @@ export default function AdminTopUpsPage() {
             <li key={item.id} className="border rounded p-3 bg-gray-50 shadow-sm">
               👤 {item.name} &nbsp; 📞 {item.phone} <br />
               {item.referralCode && `代碼：${item.referralCode}`}<br />
-              📸 <a
+              📸{' '}
+              <a
                 href={item.imageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 underline"
               >
                 查看截圖
-              </a><br />
+              </a>
+              <br />
               🕒 {new Date(item.createdAt).toLocaleString()}
             </li>
           ))}
