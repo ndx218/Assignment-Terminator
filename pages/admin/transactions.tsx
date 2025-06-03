@@ -8,25 +8,25 @@ type TransactionRecord = {
   amount: number;
   type: string;
   description?: string;
-  createdAt: string;  // 從 API 拿到字串
+  createdAt: string;
   user: { email: string };
 };
 
 export default function AdminTransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/admin/all‐transactions')
+    fetch('/api/admin/all-transactions')  // ✅ 同样要用 U+002D
       .then(async (res) => {
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || '未知錯誤');
+          throw new Error(err.error || 'Unknown error');
         }
         return res.json();
       })
-      .then((data) => {
+      .then((data: TransactionRecord[]) => {
         setTransactions(data);
       })
       .catch((e) => {
