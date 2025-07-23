@@ -2,25 +2,33 @@
 
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { usePointStore } from '@/lib/usePointStore';
+import {
+  usePointStore,
+  type PointState,
+} from '@/hooks/usePointStore';
 
 export default function PointBalance() {
   const { data: session } = useSession();
-  const { points, setPoints } = usePointStore();
 
+  /* ---------------- 取出 credits / set ---------------- */
+  const credits = usePointStore((s: PointState) => s.credits);
+  const set     = usePointStore((s: PointState) => s.set);
+
+  /* ---------------- 首次載入 & session 變動時同步點數 ---------------- */
   useEffect(() => {
     if (session?.user?.credits != null) {
-      setPoints(session.user.credits);
+      set(session.user.credits);     // 後端帶回的剩餘點數
     } else {
-      setPoints(2); // 預設新帳戶 2 點
+      set(3);                        // 新用戶預設 2 點
     }
-  }, [session, setPoints]);
+  }, [session, set]);
 
+  /* 未登入時不顯示 */
   if (!session?.user) return null;
 
   return (
     <div className="fixed top-4 right-4 bg-yellow-100 text-yellow-800 px-4 py-2 rounded shadow text-sm">
-      👤 {session.user.name ?? '訪客'}｜🪙 點數：<strong>{points}</strong>
+      👤 {session.user.name ?? '訪客'} ｜ 🪙 點數：<strong>{credits}</strong>
     </div>
   );
 }
