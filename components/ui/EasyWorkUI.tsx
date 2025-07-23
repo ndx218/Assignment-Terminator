@@ -1,4 +1,3 @@
-// components/EasyWorkUI.tsx
 "use client";
 
 import { useState } from "react";
@@ -15,7 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 import { MODE_COST, getCost, StepName } from "@/lib/points";
-import { usePointStore } from "@/hooks/usePointStore";
+import {
+  usePointStore,
+  type PointState,   // ★ 引入型別
+} from "@/hooks/usePointStore";
 
 /* --------------------- 常量 --------------------- */
 const steps = [
@@ -66,8 +68,8 @@ export default function EasyWorkUI() {
   } as any);
 
   /* ----------- 點數 ----------- */
-  const credits = usePointStore((s) => s.credits);
-  const spend = usePointStore((s) => s.spend);
+  const credits = usePointStore((state: PointState) => state.credits); // ★
+  const spend   = usePointStore((state: PointState) => state.spend);   // ★
 
   /* ----------- 模式狀態 ----------- */
   const [mode, setMode] = useState<ModeState>({
@@ -81,13 +83,12 @@ export default function EasyWorkUI() {
   /* ===================================================== */
   /*  送 API 之前：檢查點數、扣點、發送；成功後更新結果            */
   /* ===================================================== */
-  async function callStep(
-    step: StepName,
-    endpoint: string,
-    body: any
-  ) {
+  async function callStep(step: StepName, endpoint: string, body: any) {
     const cost = getCost(step, mode[step]);
-    if (cost > 0 && credits < cost) return alert("點數不足，請先充值或切回免費模式");
+    if (cost > 0 && credits < cost) {
+      alert("點數不足，請先充值或切回免費模式");
+      return;
+    }
 
     setLoading((l) => ({ ...l, [step]: true }));
     try {
@@ -96,7 +97,7 @@ export default function EasyWorkUI() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, mode: mode[step] }),
       });
-      const data = await res.json();
+      const data  = await res.json();
       const text =
         data.outline ||
         data.draft ||
@@ -107,9 +108,8 @@ export default function EasyWorkUI() {
 
       if (!res.ok) throw new Error(data.error || "伺服器回傳錯誤");
 
-      // 成功 → 扣點、寫結果
-      if (cost > 0) spend(cost);
-      setResults((r) => ({ ...r, [step]: text }));
+      if (cost > 0) spend(cost);                 // 扣點
+      setResults((r) => ({ ...r, [step]: text })); // 寫結果
     } catch (e: any) {
       alert("❌ " + e.message);
     } finally {
@@ -123,8 +123,8 @@ export default function EasyWorkUI() {
       {/* -------------- 頂欄 -------------- */}
       <div className="w-full bg-green-50 border-b border-green-200 px-4 py-2 text-sm flex justify-between items-center">
         <div>
-          👤 <span className="font-medium">{session?.user?.email}</span> ｜
-          目前剩餘 <span className="font-bold text-blue-600">{credits}</span> 點
+          👤 <span className="font-medium">{session?.user?.email}</span> ｜ 目前剩餘{" "}
+          <span className="font-bold text-blue-600">{credits}</span> 點
         </div>
         <Button
           variant="ghost"
@@ -338,14 +338,13 @@ interface ModeSelectProps {
   label?: string;
 }
 function ModeSelect({ step, value, onChange, label }: ModeSelectProps) {
-  const credits = usePointStore((s) => s.credits);
+  const credits = usePointStore((state: PointState) => state.credits); // ★
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className="mb-1 w-full border rounded px-2 py-1 text-sm"
     >
-      {/* 列出該步驟所有可用模式 */}
       {Object.entries(MODE_COST[step]).map(([m, c]) => (
         <option key={m} value={m} disabled={c > 0 && credits < c}>
           {label ? label + "：" : ""}
