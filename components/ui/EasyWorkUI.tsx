@@ -1,5 +1,4 @@
-/* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
-
+/* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
 "use client";
 
 import { useState } from "react";
@@ -7,13 +6,16 @@ import { useSession, signOut } from "next-auth/react";
 import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import Textarea   from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { Card   } from "@/components/ui/card";
+import { Input   } from "@/components/ui/input";
+import Textarea    from "@/components/ui/textarea";
+import { Button  } from "@/components/ui/button";
+import { Card    } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
-import { usePointStore, type PointState }     from "@/hooks/usePointStore";
+import {
+  useCredits,  // ✅ selector hooks
+  useSpend,
+} from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
 const steps = [
@@ -52,9 +54,9 @@ export default function EasyWorkUI() {
     outline:false, draft:false, feedback:false, rewrite:false, final:false,
   });
 
-  /* ----------- 點數（★ 已標型別） ----------- */
-  const credits = usePointStore<PointState>((s) => s.credits);
-  const spend   = usePointStore<PointState>((s) => s.spend);
+  /* ----------- 點數 ----------- */
+  const credits = useCredits(); // ← 改用 selector
+  const spend   = useSpend();   // ← 改用 selector
 
   /* ----------- 模式 ----------- */
   const [mode, setMode] = useState<ModeState>({
@@ -193,23 +195,31 @@ export default function EasyWorkUI() {
 
 /* =============================================================== */
 interface StepBlockProps {
-  step: StepName; mode: string; loading: boolean; btnText:string;
-  setMode:(v:ModeState[keyof ModeState])=>void; onClick:()=>void;
+  step: StepName;
+  mode: string;
+  loading: boolean;
+  btnText: string;
+  setMode: (v: ModeState[keyof ModeState]) => void;
+  onClick: () => void;
 }
-function StepBlock({step,mode,setMode,loading,btnText,onClick}:StepBlockProps){
-  return(
+function StepBlock({ step, mode, setMode, loading, btnText, onClick }: StepBlockProps) {
+  return (
     <>
-      <ModeSelect step={step} value={mode} onChange={v=>setMode(v as any)}/>
+      <ModeSelect step={step} value={mode} onChange={v=>setMode(v as any)} />
       <Button isLoading={loading} onClick={onClick}
         className="w-full bg-blue-500 text-white mb-3">{btnText}</Button>
     </>
   );
 }
 
-interface ModeSelectProps{ step:StepName; value:string; onChange:(v:string)=>void; }
-function ModeSelect({step,value,onChange}:ModeSelectProps){
-  const credits = usePointStore<PointState>((s)=>s.credits);
-  return(
+interface ModeSelectProps {
+  step: StepName;
+  value: string;
+  onChange: (v: string) => void;
+}
+function ModeSelect({ step, value, onChange }: ModeSelectProps) {
+  const credits = useCredits();  // ← 也用 selector
+  return (
     <select value={value} onChange={e=>onChange(e.target.value)}
       className="mb-1 w-full border rounded px-2 py-1 text-sm">
       {Object.entries(MODE_COST[step]).map(([m,c])=>(
@@ -220,6 +230,6 @@ function ModeSelect({step,value,onChange}:ModeSelectProps){
     </select>
   );
 }
-const modeLabel=(m:string)=>({
+const modeLabel = (m: string) => ({
   free:"GPT‑3.5", flash:"Gemini Flash", pro:"Gemini Pro", undetectable:"Undetectable"
 } as Record<string,string>)[m] ?? m;
