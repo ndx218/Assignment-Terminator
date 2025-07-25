@@ -4,31 +4,34 @@
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import {
-  Tabs, TabsContent, TabsList, TabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
 } from "@/components/ui/tabs";
-import { Input   } from "@/components/ui/input";
-import Textarea    from "@/components/ui/textarea";
-import { Button  } from "@/components/ui/button";
-import { Card    } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import Textarea from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend } from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
 const steps: Array<{ key: StepName; label: string }> = [
-  { key: "outline",  label: "📑 大綱產生器" },
-  { key: "draft",    label: "✍️ 初稿" },
+  { key: "outline", label: "📑 大綱產生器" },
+  { key: "draft", label: "✍️ 初稿" },
   { key: "feedback", label: "🧑‍🏫 教師評論" },
-  { key: "rewrite",  label: "📝 修訂稿" },
-  { key: "final",    label: "🤖 最終版本" },
+  { key: "rewrite", label: "📝 修訂稿" },
+  { key: "final", label: "🤖 最終版本" },
 ];
 
 type ModeState = {
   outline: "free" | "flash";
-  draft:   "free" | "pro";
-  feedback:"free" | "flash";
+  draft: "free" | "pro";
+  feedback: "free" | "flash";
   rewrite: "free" | "pro";
-  final:   "free" | "undetectable";
+  final: "free" | "undetectable";
 };
 
 type Payload = Record<string, unknown>;
@@ -39,63 +42,82 @@ export default function EasyWorkUI() {
 
   /* ----------- 表單 ----------- */
   const [form, setForm] = useState({
-    name:"", school:"", title:"", wordCount:"",
-    language:"中文", tone:"正式", detail:"",
-    reference:"", rubric:"", paragraph:"",
+    name: "",
+    school: "",
+    title: "",
+    wordCount: "",
+    language: "中文",
+    tone: "正式",
+    detail: "",
+    reference: "",
+    rubric: "",
+    paragraph: "",
   });
 
   /* ----------- 結果 / 複製指示 ----------- */
-  const [results, setResults] = useState<Record<string,string>>({});
-  const [copied , setCopied ] = useState<Record<string,boolean>>({});
+  const [results, setResults] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState<Record<string, boolean>>({});
 
   /* ----------- Loading ----------- */
-  const [loading, setLoading] = useState<Record<StepName,boolean>>({
-    outline:false, draft:false, feedback:false, rewrite:false, final:false,
+  const [loading, setLoading] = useState<Record<StepName, boolean>>({
+    outline: false,
+    draft: false,
+    feedback: false,
+    rewrite: false,
+    final: false,
   });
 
   /* ----------- 點數 ----------- */
   const credits = useCredits();
-  const spend   = useSpend();
+  const spend = useSpend();
 
   /* ----------- 模式 ----------- */
   const [mode, setMode] = useState<ModeState>({
-    outline:"free", draft:"free", feedback:"free", rewrite:"free", final:"free",
+    outline: "free",
+    draft: "free",
+    feedback: "free",
+    rewrite: "free",
+    final: "free",
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
-  async function callStep(step: StepName, endpoint: string, body: Payload) {
+  async function callStep(
+    step: StepName,
+    endpoint: string,
+    body: Payload = {} // ✅ 預設就是物件，避免展開 unknown
+  ) {
     const cost = getCost(step, mode[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
       return;
     }
 
-    setLoading((l)=>({...l,[step]:true}));
-    try{
+    setLoading((l) => ({ ...l, [step]: true }));
+    try {
       const payload: Payload = { ...body, mode: mode[step] };
 
-      const res  = await fetch(endpoint,{
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify(payload),
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
       const data: any = await res.json();
-      if(!res.ok) throw new Error(data.error||"伺服器回傳錯誤");
+      if (!res.ok) throw new Error(data.error || "伺服器回傳錯誤");
 
       const text: string =
         data.outline ||
-        data.draft   ||
-        data.feedback||
+        data.draft ||
+        data.feedback ||
         data.rewrite ||
-        data.result  ||
+        data.result ||
         "";
 
-      if(cost>0) spend(cost);
-      setResults(r=>({...r,[step]:text}));
-    }catch(e){
-      alert("❌ "+(e as Error).message);
-    }finally{
-      setLoading(l=>({...l,[step]:false}));
+      if (cost > 0) spend(cost);
+      setResults((r) => ({ ...r, [step]: text }));
+    } catch (e) {
+      alert("❌ " + (e as Error).message);
+    } finally {
+      setLoading((l) => ({ ...l, [step]: false }));
     }
   }
 
@@ -109,8 +131,14 @@ export default function EasyWorkUI() {
           {" ｜ 目前剩餘 "}
           <span className="font-bold text-blue-600">{credits}</span> 點
         </div>
-        <Button variant="ghost" className="text-red-600 hover:text-black px-2 py-1"
-          onClick={()=>{ localStorage.removeItem("skipLogin"); signOut({callbackUrl:"/login"}); }}>
+        <Button
+          variant="ghost"
+          className="text-red-600 hover:text-black px-2 py-1"
+          onClick={() => {
+            localStorage.removeItem("skipLogin");
+            signOut({ callbackUrl: "/login" });
+          }}
+        >
           🚪 登出
         </Button>
       </div>
@@ -120,27 +148,49 @@ export default function EasyWorkUI() {
         <div className="w-72 border-r p-4 bg-gray-50 overflow-y-auto">
           <h2 className="font-bold text-lg mb-4">📚 功課設定</h2>
 
-          {(["name","school","title","wordCount","reference","rubric","paragraph"] as const)
-            .map(f=>(
-              <Input key={f} placeholder={f} className="mb-2 w-full"
-                onChange={e=>setForm({...form,[f]:e.target.value})}/>
+          {(
+            [
+              "name",
+              "school",
+              "title",
+              "wordCount",
+              "reference",
+              "rubric",
+              "paragraph",
+            ] as const
+          ).map((f) => (
+            <Input
+              key={f}
+              placeholder={f}
+              className="mb-2 w-full"
+              onChange={(e) => setForm({ ...form, [f]: e.target.value })}
+            />
           ))}
 
           {/* 語言 / Tone */}
-          <select value={form.language} className="mb-2 w-full border rounded px-2 py-1"
-            onChange={e=>setForm({...form,language:e.target.value})}>
+          <select
+          value={form.language}
+          className="mb-2 w-full border rounded px-2 py-1"
+          onChange={(e) => setForm({ ...form, language: e.target.value })}
+          >
             <option value="中文">中文</option>
             <option value="英文">英文</option>
           </select>
-          <select value={form.tone} className="mb-4 w-full border rounded px-2 py-1"
-            onChange={e=>setForm({...form,tone:e.target.value})}>
+          <select
+            value={form.tone}
+            className="mb-4 w-full border rounded px-2 py-1"
+            onChange={(e) => setForm({ ...form, tone: e.target.value })}
+          >
             <option value="正式">正式</option>
             <option value="半正式">半正式</option>
             <option value="輕鬆">輕鬆</option>
           </select>
 
-          <Textarea placeholder="內容細節" className="mb-4 w-full"
-            onChange={e=>setForm({...form,detail:e.target.value})}/>
+          <Textarea
+            placeholder="內容細節"
+            className="mb-4 w-full"
+            onChange={(e) => setForm({ ...form, detail: e.target.value })}
+          />
 
           {/* -------- 各步驟 -------- */}
           <StepBlock
@@ -148,8 +198,10 @@ export default function EasyWorkUI() {
             mode={mode.outline}
             loading={loading.outline}
             btnText="🧠 產生大綱"
-            setMode={(v) => setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))}
-            onClick={() => callStep("outline","/api/outline",form)}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))
+            }
+            onClick={() => callStep("outline", "/api/outline", form)}
           />
 
           <StepBlock
@@ -157,17 +209,28 @@ export default function EasyWorkUI() {
             mode={mode.draft}
             loading={loading.draft}
             btnText="✍️ 草稿產生"
-            setMode={(v) => setMode((m) => ({ ...m, draft: v as ModeState["draft"] }))}
-            onClick={() => callStep("draft","/api/draft",{...form, outline: results.outline})}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, draft: v as ModeState["draft"] }))
+            }
+            onClick={() =>
+              callStep("draft", "/api/draft", {
+                ...form,
+                outline: results.outline,
+              })
+            }
           />
 
           <StepBlock
-          step="feedback"
-          mode={mode.feedback}
-          loading={loading.feedback}
-          btnText="🧑‍🏫 教師評論"
-          setMode={(v) => setMode((m) => ({ ...m, feedback: v as ModeState["feedback"] }))}
-          onClick={() => callStep("feedback","/api/feedback",{ text: results.draft })}
+            step="feedback"
+            mode={mode.feedback}
+            loading={loading.feedback}
+            btnText="🧑‍🏫 教師評論"
+            setMode={(v) =>
+              setMode((m) => ({ ...m, feedback: v as ModeState["feedback"] }))
+            }
+            onClick={() =>
+              callStep("feedback", "/api/feedback", { text: results.draft })
+            }
           />
 
           <StepBlock
@@ -175,8 +238,12 @@ export default function EasyWorkUI() {
             mode={mode.rewrite}
             loading={loading.rewrite}
             btnText="📝 GPT‑style 修訂"
-            setMode={(v) => setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))}
-            onClick={() => callStep("rewrite","/api/rewrite",{ text: results.draft })}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))
+            }
+            onClick={() =>
+              callStep("rewrite", "/api/rewrite", { text: results.draft })
+            }
           />
 
           <StepBlock
@@ -184,8 +251,12 @@ export default function EasyWorkUI() {
             mode={mode.final}
             loading={loading.final}
             btnText="🤖 最終人性化優化"
-            setMode={(v) => setMode((m) => ({ ...m, final: v as ModeState["final"] }))}
-            onClick={() => callStep("final","/api/undetectable",{ text: results.rewrite })}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, final: v as ModeState["final"] }))
+            }
+            onClick={() =>
+              callStep("final", "/api/undetectable", { text: results.rewrite })
+            }
           />
         </div>
 
@@ -194,7 +265,9 @@ export default function EasyWorkUI() {
           <Tabs defaultValue="outline">
             <TabsList>
               {steps.map(({ key, label }) => (
-                <TabsTrigger key={key} value={key}>{label}</TabsTrigger>
+                <TabsTrigger key={key} value={key}>
+                  {label}
+                </TabsTrigger>
               ))}
             </TabsList>
 
@@ -206,7 +279,9 @@ export default function EasyWorkUI() {
                     rows={1}
                     className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
                     value={results[key] || ""}
-                    onChange={(e) => setResults((r) => ({ ...r, [key]: e.target.value }))}
+                    onChange={(e) =>
+                      setResults((r) => ({ ...r, [key]: e.target.value }))
+                    }
                   />
                   {results[key] && (
                     <>
@@ -248,12 +323,22 @@ interface StepBlockProps {
   setMode: (v: string) => void;
   onClick: () => void;
 }
-function StepBlock({ step, mode, setMode, loading, btnText, onClick }: StepBlockProps) {
+function StepBlock({
+  step,
+  mode,
+  setMode,
+  loading,
+  btnText,
+  onClick,
+}: StepBlockProps) {
   return (
     <>
       <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
-      <Button isLoading={loading} onClick={onClick}
-        className="w-full bg-blue-500 text-white mb-3">
+      <Button
+        isLoading={loading}
+        onClick={onClick}
+        className="w-full bg-blue-500 text-white mb-3"
+      >
         {btnText}
       </Button>
     </>
@@ -276,7 +361,8 @@ function ModeSelect({ step, value, onChange }: ModeSelectProps) {
     >
       {Object.entries(costMap).map(([m, c]) => (
         <option key={m} value={m} disabled={c > 0 && credits < c}>
-          {modeLabel(m)} {c > 0 ? `(+${c} 點)` : "(0 點)"}{c > 0 && credits < c ? " — 點數不足" : ""}
+          {modeLabel(m)} {c > 0 ? `(+${c} 點)` : "(0 點)"}
+          {c > 0 && credits < c ? " — 點數不足" : ""}
         </option>
       ))}
     </select>
