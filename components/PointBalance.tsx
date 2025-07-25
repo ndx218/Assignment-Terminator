@@ -1,33 +1,37 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useCredits, useSetCredits } from '@/hooks/usePointStore';
 
 export default function PointBalance() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
-  /* 直接用 selector 取得 */
-  const credits     = useCredits();
-  const setCredits  = useSetCredits();
+  const credits    = useCredits();
+  const setCredits = useSetCredits();
 
-  /* session 變動 → 同步點數 */
+  // 防止在 React StrictMode 下 effect 觸發 2 次而重複 set
+  const initialized = useRef(false);
+
   useEffect(() => {
-    if (session?.user?.credits != null) {
-      setCredits(session.user.credits);   // 後端帶回的餘額
-    } else {
-      setCredits(5);                      // 來賓 / 新用戶預設 3 點
-    }
-  }, [session, setCredits]);
+    if (initialized.current) return;
+    if (status === 'loading') return;
 
-  /* 未登入時不顯示 */
-  if (!session?.user) return null;
+    const value =
+      typeof session?.user?.credits === 'number'
+        ? session.user.credits
+        : 5; // 預設點數
+
+    setCredits(value);
+    initialized.current = true;
+  }, [session, status, setCredits]);
+
+  // 沒登入或還在載入就不顯示
+  if (status !== 'authenticated' || !session?.user) return null;
 
   return (
-    <div className="fixed top-4 right-4 bg-yellow-100 text-yellow-800
-                    px-4 py-2 rounded shadow text-sm">
-      👤 {session.user.name ?? '訪客'} ｜ 🪙 點數：
-      <strong>{credits}</strong>
+    <div className="fixed top-4 right-4 z-50 bg-yellow-100 text-yellow-800 px-4 py-2 rounded shadow text-sm">
+      👤 {session.user.name ?? '訪客'} ｜ 🪙 點數：<strong>{credits}</strong>
     </div>
   );
 }
