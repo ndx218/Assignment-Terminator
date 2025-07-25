@@ -30,6 +30,10 @@ export const usePointStore = create<PointState>()(
 );
 
 /* ------------ Selector helpers ------------ */
-export const useCredits      = () => usePointStore((s) => s.credits);
-export const useSpend        = () => usePointStore((s) => s.spend);
-export const useHasCredits   = () => usePointStore((s) => s.has);
+export const useCredits     = () => usePointStore((s) => s.credits);
+export const useSpend       = () => usePointStore((s) => s.spend);
+export const useHasCredits  = () => usePointStore((s) => s.has);
+
+// 👇 新增這兩個
+export const useSetCredits  = () => usePointStore((s) => s.set);
+export const useAddCredits  = () => usePointStore((s) => s.add);
