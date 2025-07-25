@@ -1,4 +1,4 @@
-/* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
+/* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
 "use client";
 
 import { useState } from "react";
@@ -12,19 +12,16 @@ import { Button  } from "@/components/ui/button";
 import { Card    } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
-import {
-  useCredits,  // ✅ selector hooks
-  useSpend,
-} from "@/hooks/usePointStore";
+import { useCredits, useSpend } from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
-const steps = [
+const steps: Array<{ key: StepName; label: string }> = [
   { key: "outline",  label: "📑 大綱產生器" },
   { key: "draft",    label: "✍️ 初稿" },
   { key: "feedback", label: "🧑‍🏫 教師評論" },
   { key: "rewrite",  label: "📝 修訂稿" },
   { key: "final",    label: "🤖 最終版本" },
-] as const satisfies readonly { key: StepName; label: string }[];
+];
 
 type ModeState = {
   outline: "free" | "flash";
@@ -33,6 +30,8 @@ type ModeState = {
   rewrite: "free" | "pro";
   final:   "free" | "undetectable";
 };
+
+type Payload = Record<string, unknown>;
 
 /* ==================================================================== */
 export default function EasyWorkUI() {
@@ -55,8 +54,8 @@ export default function EasyWorkUI() {
   });
 
   /* ----------- 點數 ----------- */
-  const credits = useCredits(); // ← 改用 selector
-  const spend   = useSpend();   // ← 改用 selector
+  const credits = useCredits();
+  const spend   = useSpend();
 
   /* ----------- 模式 ----------- */
   const [mode, setMode] = useState<ModeState>({
@@ -64,21 +63,33 @@ export default function EasyWorkUI() {
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
-  async function callStep(step: StepName, endpoint: string, body: unknown) {
+  async function callStep(step: StepName, endpoint: string, body: Payload) {
     const cost = getCost(step, mode[step]);
-    if (cost>0 && credits < cost) return alert("點數不足，請先充值或切回免費模式");
+    if (cost > 0 && credits < cost) {
+      alert("點數不足，請先充值或切回免費模式");
+      return;
+    }
 
     setLoading((l)=>({...l,[step]:true}));
     try{
+      const payload: Payload = { ...body, mode: mode[step] };
+
       const res  = await fetch(endpoint,{
         method:"POST",
         headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({ ...body, mode:mode[step] }),
+        body:JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data: any = await res.json();
       if(!res.ok) throw new Error(data.error||"伺服器回傳錯誤");
 
-      const text:string = data.outline||data.draft||data.feedback||data.rewrite||data.result||"";
+      const text: string =
+        data.outline ||
+        data.draft   ||
+        data.feedback||
+        data.rewrite ||
+        data.result  ||
+        "";
+
       if(cost>0) spend(cost);
       setResults(r=>({...r,[step]:text}));
     }catch(e){
@@ -118,69 +129,104 @@ export default function EasyWorkUI() {
           {/* 語言 / Tone */}
           <select value={form.language} className="mb-2 w-full border rounded px-2 py-1"
             onChange={e=>setForm({...form,language:e.target.value})}>
-            <option value="中文">中文</option><option value="英文">英文</option>
+            <option value="中文">中文</option>
+            <option value="英文">英文</option>
           </select>
           <select value={form.tone} className="mb-4 w-full border rounded px-2 py-1"
             onChange={e=>setForm({...form,tone:e.target.value})}>
-            <option value="正式">正式</option><option value="半正式">半正式</option><option value="輕鬆">輕鬆</option>
+            <option value="正式">正式</option>
+            <option value="半正式">半正式</option>
+            <option value="輕鬆">輕鬆</option>
           </select>
 
           <Textarea placeholder="內容細節" className="mb-4 w-full"
             onChange={e=>setForm({...form,detail:e.target.value})}/>
 
           {/* -------- 各步驟 -------- */}
-          <StepBlock step="outline"  mode={mode.outline}  loading={loading.outline}
+          <StepBlock
+            step="outline"
+            mode={mode.outline}
+            loading={loading.outline}
             btnText="🧠 產生大綱"
-            setMode={v=>setMode(m=>({...m,outline:v}))}
-            onClick={()=>callStep("outline","/api/outline",form)} />
+            setMode={(v) => setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))}
+            onClick={() => callStep("outline","/api/outline",form)}
+          />
 
-          <StepBlock step="draft"    mode={mode.draft}    loading={loading.draft}
+          <StepBlock
+            step="draft"
+            mode={mode.draft}
+            loading={loading.draft}
             btnText="✍️ 草稿產生"
-            setMode={v=>setMode(m=>({...m,draft:v}))}
-            onClick={()=>callStep("draft","/api/draft",{...form,outline:results.outline})} />
+            setMode={(v) => setMode((m) => ({ ...m, draft: v as ModeState["draft"] }))}
+            onClick={() => callStep("draft","/api/draft",{...form, outline: results.outline})}
+          />
 
-          <StepBlock step="feedback" mode={mode.feedback} loading={loading.feedback}
-            btnText="🧑‍🏫 教師評論"
-            setMode={v=>setMode(m=>({...m,feedback:v}))}
-            onClick={()=>callStep("feedback","/api/feedback",{text:results.draft})} />
+          <StepBlock
+          step="feedback"
+          mode={mode.feedback}
+          loading={loading.feedback}
+          btnText="🧑‍🏫 教師評論"
+          setMode={(v) => setMode((m) => ({ ...m, feedback: v as ModeState["feedback"] }))}
+          onClick={() => callStep("feedback","/api/feedback",{ text: results.draft })}
+          />
 
-          <StepBlock step="rewrite"  mode={mode.rewrite}  loading={loading.rewrite}
+          <StepBlock
+            step="rewrite"
+            mode={mode.rewrite}
+            loading={loading.rewrite}
             btnText="📝 GPT‑style 修訂"
-            setMode={v=>setMode(m=>({...m,rewrite:v}))}
-            onClick={()=>callStep("rewrite","/api/rewrite",{text:results.draft})} />
+            setMode={(v) => setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))}
+            onClick={() => callStep("rewrite","/api/rewrite",{ text: results.draft })}
+          />
 
-          <StepBlock step="final"    mode={mode.final}    loading={loading.final}
+          <StepBlock
+            step="final"
+            mode={mode.final}
+            loading={loading.final}
             btnText="🤖 最終人性化優化"
-            setMode={v=>setMode(m=>({...m,final:v}))}
-            onClick={()=>callStep("final","/api/undetectable",{text:results.rewrite})} />
+            setMode={(v) => setMode((m) => ({ ...m, final: v as ModeState["final"] }))}
+            onClick={() => callStep("final","/api/undetectable",{ text: results.rewrite })}
+          />
         </div>
 
         {/* -------- 右：結果 -------- */}
         <div className="flex-1 overflow-y-auto p-6">
           <Tabs defaultValue="outline">
             <TabsList>
-              {steps.map(s=>(
-                <TabsTrigger key={s.key} value={s.key}>{s.label}</TabsTrigger>
+              {steps.map(({ key, label }) => (
+                <TabsTrigger key={key} value={key}>{label}</TabsTrigger>
               ))}
             </TabsList>
 
-            {steps.map(({key,label})=>(
+            {steps.map(({ key, label }) => (
               <TabsContent key={key} value={key}>
                 <Card className="p-4 mt-4 bg-gray-50 relative">
                   <h3 className="font-semibold mb-2">{label}：</h3>
-                  <Textarea rows={1} className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
-                    value={results[key]||""}
-                    onChange={e=>setResults(r=>({...r,[key]:e.target.value}))}/>
+                  <Textarea
+                    rows={1}
+                    className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
+                    value={results[key] || ""}
+                    onChange={(e) => setResults((r) => ({ ...r, [key]: e.target.value }))}
+                  />
                   {results[key] && (
                     <>
-                      <Button variant="outline" size="sm"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="absolute bottom-2 right-4"
-                        onClick={()=>{
+                        onClick={() => {
                           navigator.clipboard.writeText(results[key]);
-                          setCopied({[key]:true});
-                          setTimeout(()=>setCopied({}),1800);
-                        }}>📋 複製</Button>
-                      {copied[key] && <span className="absolute bottom-2 right-20 text-green-600 text-sm">✅ 已複製！</span>}
+                          setCopied({ [key]: true });
+                          setTimeout(() => setCopied({}), 1800);
+                        }}
+                      >
+                        📋 複製
+                      </Button>
+                      {copied[key] && (
+                        <span className="absolute bottom-2 right-20 text-green-600 text-sm">
+                          ✅ 已複製！
+                        </span>
+                      )}
                     </>
                   )}
                 </Card>
@@ -199,15 +245,17 @@ interface StepBlockProps {
   mode: string;
   loading: boolean;
   btnText: string;
-  setMode: (v: ModeState[keyof ModeState]) => void;
+  setMode: (v: string) => void;
   onClick: () => void;
 }
 function StepBlock({ step, mode, setMode, loading, btnText, onClick }: StepBlockProps) {
   return (
     <>
-      <ModeSelect step={step} value={mode} onChange={v=>setMode(v as any)} />
+      <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
       <Button isLoading={loading} onClick={onClick}
-        className="w-full bg-blue-500 text-white mb-3">{btnText}</Button>
+        className="w-full bg-blue-500 text-white mb-3">
+        {btnText}
+      </Button>
     </>
   );
 }
@@ -218,18 +266,27 @@ interface ModeSelectProps {
   onChange: (v: string) => void;
 }
 function ModeSelect({ step, value, onChange }: ModeSelectProps) {
-  const credits = useCredits();  // ← 也用 selector
+  const credits = useCredits();
+  const costMap = MODE_COST[step] as Record<string, number>;
   return (
-    <select value={value} onChange={e=>onChange(e.target.value)}
-      className="mb-1 w-full border rounded px-2 py-1 text-sm">
-      {Object.entries(MODE_COST[step]).map(([m,c])=>(
-        <option key={m} value={m} disabled={c>0 && credits<c}>
-          {modeLabel(m)} {c>0?`(+${c} 點)`:"(0 點)"}{c>0 && credits<c?" — 點數不足":""}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="mb-1 w-full border rounded px-2 py-1 text-sm"
+    >
+      {Object.entries(costMap).map(([m, c]) => (
+        <option key={m} value={m} disabled={c > 0 && credits < c}>
+          {modeLabel(m)} {c > 0 ? `(+${c} 點)` : "(0 點)"}{c > 0 && credits < c ? " — 點數不足" : ""}
         </option>
       ))}
     </select>
   );
 }
-const modeLabel = (m: string) => ({
-  free:"GPT‑3.5", flash:"Gemini Flash", pro:"Gemini Pro", undetectable:"Undetectable"
-} as Record<string,string>)[m] ?? m;
+
+const modeLabel = (m: string) =>
+  ({
+    free: "GPT‑3.5",
+    flash: "Gemini Flash",
+    pro: "Gemini Pro",
+    undetectable: "Undetectable",
+  } as Record<string, string>)[m] ?? m;
