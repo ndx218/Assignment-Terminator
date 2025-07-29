@@ -1,59 +1,44 @@
-// ✅ 修正後：/pages/api/feedback.ts
+// /pages/api/feedback.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { callLLM, mapMode } from '@/lib/ai';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST requests are allowed' });
-  }
+type ResBody = { feedback: string } | { error: string };
 
-  const { text } = req.body;
+export default async function handler(req: NextApiRequest, res: NextApiResponse<ResBody>) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST requests are allowed' });
 
-  if (!text) {
+  const { text, mode = 'free' } = (req.body ?? {}) as Record<string, any>;
+  if (typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'Missing required field: text' });
   }
 
+  const system = '你是一位嚴格但鼓勵學生的老師。請指出這篇文章中的問題或不足，並給出具體改善建議。使用條列式，避免重寫全文。';
+
   try {
-    if (!process.env.OPENROUTER_API_KEY) {
-      throw new Error('❌ 缺少 OPENROUTER_API_KEY 環境變數');
-    }
-
-    const completionRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://easy-work103.vercel.app',
-        'X-Title': 'EasyWork'
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: '你是一位嚴格但鼓勵學生的老師。請指出這篇文章中有哪些問題或不足，並給出具體改善建議。請用清晰條列方式呈現評論，不需要重寫文章。'
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        max_tokens: 1000
-      })
-    });
-
-    const rawText = await completionRes.text();
-    let json;
-    try {
-      json = JSON.parse(rawText);
-    } catch (err) {
-      throw new Error('AI 回傳非 JSON 格式內容：' + rawText);
-    }
-
-    const feedback = json?.choices?.[0]?.message?.content || '⚠️ 教師評論生成失敗';
-    return res.status(200).json({ feedback });
-
+    const llmOpts = mapMode('review', mode);
+    const feedback = await callLLM(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: text },
+      ],
+      { ...llmOpts, title: process.env.OPENROUTER_TITLE ?? 'Assignment Terminator', referer: process.env.OPENROUTER_REFERER ?? process.env.NEXT_PUBLIC_APP_URL }
+    );
+    return res.status(200).json({ feedback: feedback || '⚠️ 教師評論生成失敗' });
   } catch (err: any) {
-    console.error('[Feedback Error]', err.message || err);
-    return res.status(500).json({ error: err.message || '未知錯誤' });
+    const msg = String(err?.message ?? '');
+    if (msg.startsWith('OPENROUTER_HTTP_')) {
+      try {
+        const fb2 = await callLLM(
+          [
+            { role: 'system', content: system },
+            { role: 'user', content: text },
+          ],
+          { model: process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo', temperature: 0.7, timeoutMs: 45_000, title: 'Feedback Fallback', referer: process.env.NEXT_PUBLIC_APP_URL }
+        );
+        return res.status(200).json({ feedback: fb2 || '⚠️ 教師評論生成失敗' });
+      } catch {}
+    }
+    console.error('[feedback]', { mode, err: msg });
+    return res.status(500).json({ error: err?.message || '未知錯誤' });
   }
 }
