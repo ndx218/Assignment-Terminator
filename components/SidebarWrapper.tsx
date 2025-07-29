@@ -1,11 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
 
 export default function SidebarWrapper() {
   const [open, setOpen] = useState(false);
+
+  const onKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') setOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener('keydown', onKeyDown);
+    // 手機浮出時鎖 body 滾動（體驗更好）
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = overflow;
+    };
+  }, [open, onKeyDown]);
 
   return (
     <>
@@ -14,6 +30,8 @@ export default function SidebarWrapper() {
         onClick={() => setOpen(true)}
         className="fixed top-4 left-4 z-40 p-2 rounded-full bg-white border shadow-md md:hidden"
         aria-label="開啟選單"
+        aria-expanded={open}
+        aria-controls="mobile-sidebar"
       >
         <Menu className="w-5 h-5 text-black" />
       </button>
@@ -21,13 +39,17 @@ export default function SidebarWrapper() {
       {/* 📱 手機版浮出側欄 + 遮罩 */}
       {open && (
         <>
-          {/* 黑色遮罩 */}
           <div
-            className="fixed inset-0 z-30 bg-black bg-opacity-30 backdrop-blur-sm"
+            className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm"
             onClick={() => setOpen(false)}
+            aria-hidden="true"
           />
-          {/* 側欄浮出 */}
-          <div className="fixed top-0 left-0 z-40 w-[240px] h-full bg-white shadow-md">
+          <div
+            id="mobile-sidebar"
+            role="dialog"
+            aria-modal="true"
+            className="fixed top-0 left-0 z-40 w-[240px] h-full bg-white shadow-md"
+          >
             <Sidebar onClose={() => setOpen(false)} />
           </div>
         </>
