@@ -1,11 +1,15 @@
-// lib/auth.ts
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/server/authOptions';
+// /lib/auth.ts
+import 'server-only'; // 防止被客戶端引入
+import { getServerSession } from 'next-auth/next';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 
-// 封裝 session 取得邏輯，其他 API route 可直接使用
-export function getAuthSession() {
-  return getServerSession(authOptions);
+/** 在 Pages API Route 內使用（必須傳 req/res） */
+export function getAuthSession(req: NextApiRequest, res: NextApiResponse) {
+  return getServerSession(req, res, authOptions);
 }
 
-// ❌ 刪除下面這行 export，不要把 authOptions 暴露給前端
-// export const authOptions = serverAuthOptions;
+/** 在 App Router (server component / route handlers) 可用這個 */
+export function getAuthSessionApp() {
+  return getServerSession(authOptions);
+}
