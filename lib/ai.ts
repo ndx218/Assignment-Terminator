@@ -1,83 +1,70 @@
-/* lib/ai.ts --------------------------------------------------------- */
-/** Minimal chat message type so we don't depend on the OpenAI SDK */
-export type ChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+// /lib/ai.ts
+type Msg = { role: 'system' | 'user' | 'assistant'; content: string };
+
+export type StepName = 'outline' | 'draft' | 'review' | 'revise' | 'final';
+
+export type LlmOpts = {
+  model: string;                // OpenRouter model slug
+  temperature?: number;
+  maxTokens?: number;
+  timeoutMs?: number;
+  referer?: string;             // optional: HTTP-Referer for OpenRouter
+  title?: string;               // optional: X-Title for OpenRouter
 };
 
-type Provider = 'openai' | 'google' | 'undetectable';
-
-interface LLMOptions {
-  provider: Provider;
-  model: string;
-  maxTokens?: number;
-}
-
-/** Call LLM via OpenRouter (OpenAI-compatible), Gemini, or your Undetectable service */
-export async function callLLM(
-  messages: ChatMessage[],
-  { provider, model, maxTokens = 1000 }: LLMOptions
-): Promise<string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  let url = '';
-  let body: any = {};
-
-  switch (provider) {
-    case 'openai': {
-      // OpenRouter (OpenAI-compatible)
-      url = 'https://openrouter.ai/api/v1/chat/completions';
-      headers.Authorization = `Bearer ${process.env.OPENROUTER_API_KEY!}`;
-      body = { model, messages, max_tokens: maxTokens };
-      break;
-    }
-
-    case 'google': {
-      // Gemini (generateContent)
-      url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY!}`;
-      body = {
-        contents: messages.map(({ role, content }) => ({
-          role,
-          parts: [{ text: content }],
-        })),
-      };
-      break;
-    }
-
-    case 'undetectable': {
-      // Your own service – adapt payload as your API expects
-      url = process.env.UNDETECTABLE_API_URL!;
-      headers['x-api-key'] = process.env.UNDETECTABLE_API_KEY!;
-      body = { text: messages.map((m) => `${m.role}: ${m.content}`).join('\n') };
-      break;
-    }
-  }
-
-  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`[LLM] ${res.status} ${await res.text()}`);
-  const json = await res.json();
-
-  // Normalize the text output
-  if (provider === 'google') {
-    const parts = json?.candidates?.[0]?.content?.parts ?? [];
-    const text = parts.map((p: any) => p?.text ?? '').join('');
-    return (text || '').trim();
-  }
-  // OpenRouter / Undetectable (if OpenAI-compatible)
-  return (json?.choices?.[0]?.message?.content ?? '').trim();
-}
-
-/** Map UI mode -> provider & model */
-export function mapMode(step: string, mode: string): LLMOptions {
+export function mapMode(step: StepName, mode: string): LlmOpts {
   switch (mode) {
-    case 'free':
-      return { provider: 'openai',  model: 'openai/gpt-3.5-turbo' };
+    // Gemini
+    case 'gemini':
+    case 'gemini-flash':
     case 'flash':
-      return { provider: 'google',  model: 'gemini-1.5-flash-latest' };
-    case 'pro':
-      return { provider: 'google',  model: 'gemini-1.5-pro-latest' };
-    case 'undetectable':
-      return { provider: 'undetectable', model: step }; // adjust to your API if needed
+      return { model: 'google/gemini-1.5-flash', temperature: 0.7, timeoutMs: 45000 };
+
+    // OpenAI
+    case 'gpt-3.5':
+    case 'openai':
+      return { model: 'openai/gpt-3.5-turbo', temperature: 0.7, timeoutMs: 45000 };
+
+    // You can add more here when you need (e.g., openai/gpt-4o-mini, google/gemini-1.5-pro)
     default:
-      throw new Error('unsupported mode');
+      return { model: 'google/gemini-1.5-flash', temperature: 0.7, timeoutMs: 45000 };
+  }
+}
+
+export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw new Error('MISCONFIG_OPENROUTER: missing OPENROUTER_API_KEY');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 45000);
+
+  try {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+        'HTTP-Referer': opts.referer ?? process.env.NEXT_PUBLIC_APP_URL ?? '',
+        'X-Title': opts.title ?? 'Assignment Terminator',
+      },
+      body: JSON.stringify({
+        model: opts.model,
+        temperature: opts.temperature ?? 0.7,
+        max_tokens: opts.maxTokens ?? 1024,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      throw new Error(`OPENROUTER_HTTP_${r.status}: ${body.slice(0, 500)}`);
+    }
+
+    const data: any = await r.json();
+    const out = data?.choices?.[0]?.message?.content ?? '';
+    return String(out).trim();
+  } finally {
+    clearTimeout(timeout);
   }
 }
