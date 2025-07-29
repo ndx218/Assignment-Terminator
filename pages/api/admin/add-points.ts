@@ -1,50 +1,96 @@
-// pages/api/admin/add-points.ts
+// /pages/api/admin/add-points.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getAuthSession } from '@/lib/auth'; // ✅ 只要一行拿到 session
 import { prisma } from '@/lib/prisma';
-import type { Session } from 'next-auth';
+import { getAuthSession } from '@/lib/auth';
+import { z } from 'zod';
+
+const BodySchema = z.object({
+  email: z.string().email('email 無效'),
+  amount: z.number().int('必須為整數').positive('必須為正整數').max(1_000_000),
+  idempotencyKey: z.string().max(128).optional(), // 可選：防重複提交
+});
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // 直接用 getAuthSession()，內部 self‐contained 拿到 authOptions
-  const session = (await getAuthSession()) as Session;
-  if (!session || session.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '未授權：僅限管理員操作' });
-  }
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: '僅支援 POST 方法' });
   }
 
-  const { email, amount } = req.body;
-  if (!email || typeof amount !== 'number') {
-    return res.status(400).json({ error: '請提供 email 與 amount' });
+  // ✅ 必須傳入 req, res，Pages API 才能解析 session
+  const session = await getAuthSession(req, res);
+  if (!session || session.user?.role !== 'ADMIN') {
+    return res.status(403).json({ error: '未授權：僅限管理員操作' });
   }
 
+  const parsed = BodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+  }
+
+  const { email, amount, idempotencyKey } = parsed.data;
+
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    const result = await prisma.$transaction(async (tx) => {
+      // ✅ 冪等：相同 idempotencyKey 的請求只生效一次
+      if (idempotencyKey) {
+        const existedTx = await tx.transaction
+          .findUnique({ where: { idempotencyKey } })
+          .catch(() => null);
+        if (existedTx) {
+          const last = await tx.user.findUnique({
+            where: { email },
+            select: { id: true, email: true, phone: true, credits: true },
+          });
+          if (!last) throw new Error('USER_NOT_FOUND');
+          return { user: last, reused: true };
+        }
+      }
+
+      // 檢查目標用戶是否存在
+      const user = await tx.user.findUnique({
+        where: { email },
+        select: { id: true, email: true, phone: true, credits: true },
+      });
+      if (!user) throw new Error('USER_NOT_FOUND');
+
+      // ✅ 原子遞增，避免競態
+      const updated = await tx.user.update({
+        where: { id: user.id },
+        data: { credits: { increment: amount } },
+        select: { id: true, email: true, phone: true, credits: true },
+      });
+
+      // ✅ 寫交易流水（含操作人與冪等鍵）
+      await tx.transaction.create({
+        data: {
+          userId: user.id,
+          amount,
+          type: 'ADMIN_TOPUP',
+          description: `管理員 ${session.user.email ?? session.user.id} 加值 ${amount} 點（新餘額 ${updated.credits}）`,
+          performedBy: session.user.id,           // 需要 schema 有 performedBy
+          idempotencyKey: idempotencyKey ?? null, // 需要 schema 有 idempotencyKey @unique
+        },
+      });
+
+      return { user: updated, reused: false };
+    });
+
+    return res.status(200).json({
+      message: result.reused ? '重複請求（冪等命中）' : `已為 ${email} 加值 ${amount} 點`,
+      user: result.user, // { id, email, phone, credits }
+    });
+  } catch (err: any) {
+    if (err?.message === 'USER_NOT_FOUND') {
       return res.status(404).json({ error: '使用者不存在' });
     }
-
-    // 更新用戶點數
-    const updated = await prisma.user.update({
-      where: { email },
-      data: { credits: user.credits + amount },
-    });
-
-    // 紀錄交易
-    await prisma.transaction.create({
-      data: {
-        userId: updated.id,
-        amount,
-        type: 'ADMIN_TOPUP',
-        description: `管理員手動加值 ${amount} 點`,
-      },
-    });
-
-    return res.status(200).json({ message: `已為 ${email} 加值 ${amount} 點` });
-  } catch (err) {
-    console.error('[加點失敗]', err);
+    // 競態情況下第二次插入相同 idempotencyKey，會撞 unique：視為冪等命中
+    if (err?.code === 'P2002' && err?.meta?.target?.includes('idempotencyKey')) {
+      const u = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true, phone: true, credits: true },
+      });
+      if (u) return res.status(200).json({ message: '重複請求（冪等命中）', user: u });
+    }
+    console.error('[admin/add-points] 失敗', err);
     return res.status(500).json({ error: '伺服器錯誤，請稍後再試' });
   }
 }
