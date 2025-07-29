@@ -16,12 +16,21 @@ export type LlmOpts = {
   title?: string;               // 會塞進 X-Title（OpenRouter 建議）
 };
 
+/** 內部預設（可用環境變數覆蓋） */
+const GEMINI_DEFAULT =
+  process.env.OPENROUTER_GEMINI_MODEL ?? 'google/gemini-2.5-flash';
+const GPT35_DEFAULT =
+  process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo';
+const GPT4O_MINI_DEFAULT =
+  process.env.OPENROUTER_GPT4O_MINI ?? 'openai/gpt-4o-mini';
+const FALLBACK_DEFAULT =
+  process.env.OPENROUTER_FALLBACK_MODEL ?? GPT35_DEFAULT;
+
 /**
  * 把 UI 的 mode 正規化並映射到 OpenRouter 模型。
  * - 'free' 先對應到 gpt-3.5（最穩）
- * - 'gemini-flash' / 'gemini' 走 google/gemini-1.5-flash
- * - 'gpt-3.5' / 'openai' 走 openai/gpt-3.5-turbo
- * 你也可以用環境變數覆蓋預設 slug：OPENROUTER_GEMINI_MODEL / OPENROUTER_GPT35_MODEL / OPENROUTER_FALLBACK_MODEL / OPENROUTER_GPT4O_MINI
+ * - 'gemini-flash' / 'gemini' 走 google/gemini-2.5-flash（或環境變數覆蓋）
+ * - 'gpt-3.5' / 'openai' 走 openai/gpt-3.5-turbo（或環境變數覆蓋）
  */
 export function mapMode(_step: string | StepName, mode: string): LlmOpts {
   const norm = normalizeMode(mode);
@@ -29,18 +38,12 @@ export function mapMode(_step: string | StepName, mode: string): LlmOpts {
 
   // Gemini（Flash）
   if (norm.includes('gemini') || norm.includes('flash')) {
-    return {
-      ...base,
-      model: process.env.OPENROUTER_GEMINI_MODEL ?? 'google/gemini-1.5-flash',
-    };
+    return { ...base, model: GEMINI_DEFAULT };
   }
 
   // OpenAI GPT‑4o Mini（若 UI 未來有 4o 相關字樣）
   if (norm.includes('gpt4omini') || norm === '4o' || norm.includes('gpt4o')) {
-    return {
-      ...base,
-      model: process.env.OPENROUTER_GPT4O_MINI ?? 'openai/gpt-4o-mini',
-    };
+    return { ...base, model: GPT4O_MINI_DEFAULT };
   }
 
   // OpenAI GPT‑3.5
@@ -50,25 +53,16 @@ export function mapMode(_step: string | StepName, mode: string): LlmOpts {
     norm.includes('gpt3') ||
     norm.includes('openai')
   ) {
-    return {
-      ...base,
-      model: process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
-    };
+    return { ...base, model: GPT35_DEFAULT };
   }
 
   // free / 預設：確保可用就走 3.5
   if (!norm || norm === 'free' || norm === 'default') {
-    return {
-      ...base,
-      model: process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
-    };
+    return { ...base, model: GPT35_DEFAULT };
   }
 
   // 其他未知字串 → fallback
-  return {
-    ...base,
-    model: process.env.OPENROUTER_FALLBACK_MODEL ?? 'openai/gpt-3.5-turbo',
-  };
+  return { ...base, model: FALLBACK_DEFAULT };
 }
 
 /** 將 UI 傳入的 mode 正規化（去空白、去裝飾字、統一大小寫與符號） */
@@ -84,6 +78,7 @@ export function normalizeMode(mode?: string): string {
 export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('MISCONFIG_OPENROUTER: missing OPENROUTER_API_KEY');
+  if (!opts?.model) throw new Error('MISCONFIG_OPENROUTER: missing model');
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 45_000);
@@ -94,8 +89,9 @@ export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${key}`,
-        'HTTP-Referer': opts.referer ?? process.env.NEXT_PUBLIC_APP_URL ?? '',
-        'X-Title': opts.title ?? 'Assignment Terminator',
+        'HTTP-Referer':
+          opts.referer ?? process.env.OPENROUTER_REFERER ?? process.env.NEXT_PUBLIC_APP_URL ?? '',
+        'X-Title': opts.title ?? process.env.OPENROUTER_TITLE ?? 'Assignment Terminator',
       },
       body: JSON.stringify({
         model: opts.model,
@@ -115,7 +111,8 @@ export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
         model: opts.model,
         body: body.slice(0, 800),
       });
-      throw new Error(`OPENROUTER_HTTP_${resp.status}`);
+      // 同時把片段串在 Error message，方便在上層 catch 看到細節
+      throw new Error(`OPENROUTER_HTTP_${resp.status}: ${body.slice(0, 500)}`);
     }
 
     const data: any = await resp.json();
