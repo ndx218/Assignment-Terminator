@@ -105,18 +105,26 @@ model Referral {
 }
 
 model Transaction {
-  id           String    @id @default(cuid())
-  userId       String
-  user         User      @relation(fields: [userId], references: [id])
-  amount       Int
-  isFirstTopUp Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  // ✅ 新增这两个字段，用于记录交易类型和描述
-  type         String    @default("GENERIC") // 例如："TOPUP", "ADMIN_TOPUP", "USAGE", "REFERRAL_BONUS"
-  description  String?   // 交易的详细描述，可选
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  amount          Int
+  isFirstTopUp    Boolean  @default(false)
+  createdAt       DateTime @default(now())
 
-  @@index([userId])
+  // 保留你原本的 string 類型，避免引入 enum 造成更多 schema 變化
+  type            String   @default("GENERIC") // "TOPUP", "ADMIN_TOPUP", "USAGE", "REFERRAL_BONUS" ...
+  description     String?
+
+  // ✅ 新增：記錄實際執行這次調整的人（多半是管理員的 userId 或 email）
+  performedBy     String?
+
+  // ✅ 新增：冪等鍵，避免重複加點（唯一）
+  idempotencyKey  String?  @unique
+
+  @@index([userId, createdAt])
 }
+
 
 model TopUpSubmission {
   id           String    @id @default(cuid())
