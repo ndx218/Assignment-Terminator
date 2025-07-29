@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Home, Wallet, HelpCircle, LogOut, X } from 'lucide-react';
+import { Home, Wallet, HelpCircle, LogOut, X, Sparkles } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { useCredits } from '@/hooks/usePointStore';
+import { useSession } from 'next-auth/react';
 
 interface SidebarProps {
   onClose?: () => void;
@@ -13,6 +15,8 @@ interface SidebarProps {
 export default function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const credits = useCredits();
+  const { status } = useSession();
 
   const mainMenu = [
     { label: '作業產生器', href: '/', icon: Home },
@@ -26,6 +30,19 @@ export default function Sidebar({ onClose }: SidebarProps) {
     router.replace('/login');             // ✅ 手動跳轉
   };
 
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+  const CreditsBadge =
+    status === 'loading' ? (
+      <div className="h-7 w-28 rounded-full bg-gray-100 animate-pulse" />
+    ) : (
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700">
+        <Sparkles className="w-4 h-4" />
+        <span className="text-sm font-medium">積分 {credits}</span>
+      </div>
+    );
+
   return (
     <aside
       className={cn(
@@ -34,7 +51,8 @@ export default function Sidebar({ onClose }: SidebarProps) {
       )}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="px-6 mb-6 flex items-center justify-between">
+      {/* 標題 */}
+      <div className="px-6 mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold leading-tight">
           📚 Assignment<br />Terminator
         </h1>
@@ -49,16 +67,34 @@ export default function Sidebar({ onClose }: SidebarProps) {
         )}
       </div>
 
+      {/* 積分膠囊 + 0 點 CTA */}
+      <div className="px-6 mb-6">
+        {CreditsBadge}
+        {status !== 'loading' && credits === 0 && (
+          <div className="mt-2">
+            <Link
+              href="/recharge"
+              className="inline-block text-xs px-2 py-1 rounded bg-black text-white hover:bg-gray-800"
+              onClick={onClose}
+            >
+              立即充值
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* 導航 */}
       <nav className="flex flex-col gap-1 px-2">
         {mainMenu.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href;
+          const active = isActive(href);
           return (
             <Link
               key={href}
               href={href}
+              aria-current={active ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-3 px-4 py-2 rounded-md transition-colors',
-                isActive
+                active
                   ? 'bg-gray-100 font-semibold text-black'
                   : 'text-gray-700 hover:bg-gray-100'
               )}
@@ -73,6 +109,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
       <hr className="my-4 border-gray-200 mx-4" />
 
+      {/* 登出 */}
       <nav className="flex flex-col gap-1 px-2">
         <button
           onClick={handleLogout}
