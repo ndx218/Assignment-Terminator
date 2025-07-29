@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth-options'; // 你專案裡的 NextAuth 設定
 import { prisma } from '@/lib/prisma';
+import { getAuthSession } from '@/lib/auth';
 import { z } from 'zod';
 
 const BodySchema = z.object({
@@ -13,7 +12,8 @@ const BodySchema = z.object({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  const session = await getServerSession(req, res, authOptions);
+  // ✅ 使用你封裝好的 helper，務必傳入 req/res
+  const session = await getAuthSession(req, res);
   if (!session || session.user?.role !== 'ADMIN') {
     return res.status(403).json({ error: '未授權：僅限管理員操作' });
   }
@@ -26,12 +26,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 若你有冪等表，先查是否已處理過（可選）
+      // 👉 冪等：同一 idempotencyKey 僅處理一次（若你有此表）
       if (idempotencyKey) {
-        const existed = await tx.idempotency.findUnique({ where: { key: idempotencyKey } }).catch(() => null);
+        const existed = await tx.idempotency
+          .findUnique({ where: { key: idempotencyKey } })
+          .catch(() => null);
         if (existed) {
-          // 已處理過，直接返回上次結果（需要你把結果也保存）
-          const last = await tx.user.findUnique({ where: { id: userId }, select: { id: true, email: true, credits: true } });
+          const last = await tx.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, phone: true, credits: true },
+          });
           if (!last) throw new Error('USER_NOT_FOUND');
           return { user: last, reused: true };
         }
@@ -40,33 +44,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // 檢查用戶
       const user = await tx.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, credits: true },
+        select: { id: true, email: true, phone: true, credits: true },
       });
       if (!user) throw new Error('USER_NOT_FOUND');
 
-      // 實際更新（若允許負數，請移除 Math.max）
+      // 計算新餘額（若允許負數就移除 Math.max）
       const nextCredits = Math.max(0, user.credits + amount);
 
+      // 更新餘額
       const updated = await tx.user.update({
         where: { id: userId },
         data: { credits: nextCredits },
-        select: { id: true, email: true, credits: true, phone: true },
+        select: { id: true, email: true, phone: true, credits: true },
       });
 
-      // 記錄交易流水（假設你有 transaction 表）
+      // 交易流水（確保有 transaction 表）
       await tx.transaction.create({
         data: {
-          userId: userId,
+          userId,
           amount,
-          type: 'ADMIN_TOPUP',
-          description: `管理員 ${session.user.email ?? session.user.id} 加值 ${amount} 點，餘額 ${updated.credits}`,
-          performedBy: session.user.id, // 若有此欄位
+          type: amount >= 0 ? 'ADMIN_TOPUP' : 'ADMIN_DEDUCT',
+          description: `管理員 ${session.user.email ?? session.user.id} 調整 ${amount} 點（新餘額 ${updated.credits}）`,
+          performedBy: session.user.id, // 若 Schema 有此欄位
         },
       });
 
-      // 保存冪等 key（可選）
+      // 記錄冪等 key（若有該表）
       if (idempotencyKey) {
-        await tx.idempotency.create({ data: { key: idempotencyKey, note: `add-credits:${userId}:${amount}` } });
+        await tx.idempotency.create({
+          data: { key: idempotencyKey, note: `add-credits:${userId}:${amount}` },
+        });
       }
 
       return { user: updated, reused: false };
@@ -74,15 +81,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       message: result.reused ? '重複請求（已套用冪等）' : 'Credits added successfully',
-      user: {
-        id: result.user.id,
-        email: result.user.email,
-        phone: result.user.phone,
-        credits: result.user.credits,
-      },
+      user: result.user,
     });
   } catch (err: any) {
-    if (err?.message === 'USER_NOT_FOUND') return res.status(404).json({ error: '使用者不存在' });
+    if (err?.message === 'USER_NOT_FOUND') {
+      return res.status(404).json({ error: '使用者不存在' });
+    }
     console.error('[add-credits] 失敗', err);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
