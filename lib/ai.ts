@@ -3,7 +3,7 @@
 // 訊息型別（OpenAI/OR 相容）
 export type Msg = { role: 'system' | 'user' | 'assistant'; content: string };
 
-// 可選：給外部用的步驟型別（你若不用，忽略即可）
+// 可選：給外部用的步驟型別
 export type StepName = 'outline' | 'draft' | 'review' | 'revise' | 'final';
 
 // 呼叫選項
@@ -21,32 +21,23 @@ const GEMINI_DEFAULT =
   process.env.OPENROUTER_GEMINI_MODEL ?? 'google/gemini-2.5-flash';
 const GPT35_DEFAULT =
   process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo';
-const GPT4O_MINI_DEFAULT =
-  process.env.OPENROUTER_GPT4O_MINI ?? 'openai/gpt-4o-mini';
 const FALLBACK_DEFAULT =
   process.env.OPENROUTER_FALLBACK_MODEL ?? GPT35_DEFAULT;
 
 /**
  * 把 UI 的 mode 正規化並映射到 OpenRouter 模型。
- * - 'free' 先對應到 gpt-3.5（最穩）
- * - 'gemini-flash' / 'gemini' 走 google/gemini-2.5-flash（或環境變數覆蓋）
- * - 'gpt-3.5' / 'openai' 走 openai/gpt-3.5-turbo（或環境變數覆蓋）
+ * - 'gemini' / 'gemini-flash' / 'flash' → google/gemini-2.5-flash
+ * - 'gpt-3.5' / 'openai' → openai/gpt-3.5-turbo
+ * - 'free' / 空字串 / 其他 → 預設走 3.5，保證可用
  */
 export function mapMode(_step: string | StepName, mode: string): LlmOpts {
   const norm = normalizeMode(mode);
   const base = { temperature: 0.7, timeoutMs: 45_000 };
 
-  // Gemini（Flash）
   if (norm.includes('gemini') || norm.includes('flash')) {
     return { ...base, model: GEMINI_DEFAULT };
   }
 
-  // OpenAI GPT‑4o Mini（若 UI 未來有 4o 相關字樣）
-  if (norm.includes('gpt4omini') || norm === '4o' || norm.includes('gpt4o')) {
-    return { ...base, model: GPT4O_MINI_DEFAULT };
-  }
-
-  // OpenAI GPT‑3.5
   if (
     norm.includes('gpt35') ||
     norm.includes('gpt3.5') ||
@@ -97,7 +88,7 @@ export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
         model: opts.model,
         temperature: opts.temperature ?? 0.7,
         max_tokens: opts.maxTokens ?? 1024,
-        messages, // OpenAI 相容格式
+        messages,
       }),
       signal: controller.signal,
     });
@@ -105,13 +96,11 @@ export async function callLLM(messages: Msg[], opts: LlmOpts): Promise<string> {
     if (!resp.ok) {
       let body = '';
       try { body = await resp.text(); } catch {}
-      // 讓你在 Vercel Function Logs 直接看到錯誤狀態與回應片段
       console.error('[openrouter error]', {
         status: resp.status,
         model: opts.model,
         body: body.slice(0, 800),
       });
-      // 同時把片段串在 Error message，方便在上層 catch 看到細節
       throw new Error(`OPENROUTER_HTTP_${resp.status}: ${body.slice(0, 500)}`);
     }
 
