@@ -15,7 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
-import { useCredits, useSpend } from "@/hooks/usePointStore";
+import {
+  useCredits,
+  useSpend,
+  useSetCredits,
+} from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
 const steps: Array<{ key: StepName; label: string }> = [
@@ -54,9 +58,12 @@ export default function EasyWorkUI() {
     paragraph: "",
   });
 
-  /* ----------- 結果 / 複製指示 ----------- */
+  /* ----------- 結果 / 其他 state ----------- */
   const [results, setResults] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<Record<string, boolean>>({});
+  const [outlineId, setOutlineId] = useState<string | null>(null);
+  const [references, setReferences] = useState<any[]>([]);
+  const [refLoading, setRefLoading] = useState(false);
 
   /* ----------- Loading ----------- */
   const [loading, setLoading] = useState<Record<StepName, boolean>>({
@@ -70,6 +77,7 @@ export default function EasyWorkUI() {
   /* ----------- 點數 ----------- */
   const credits = useCredits();
   const spend = useSpend();
+  const setCredits = useSetCredits();
 
   /* ----------- 模式 ----------- */
   const [mode, setMode] = useState<ModeState>({
@@ -84,7 +92,7 @@ export default function EasyWorkUI() {
   async function callStep(
     step: StepName,
     endpoint: string,
-    body: Payload = {} // ✅ 預設就是物件，避免展開 unknown
+    body: Payload = {}
   ) {
     const cost = getCost(step, mode[step]);
     if (cost > 0 && credits < cost) {
@@ -104,20 +112,51 @@ export default function EasyWorkUI() {
       const data: any = await res.json();
       if (!res.ok) throw new Error(data.error || "伺服器回傳錯誤");
 
+      /* ---------- 解析回傳 ---------- */
       const text: string =
-        data.outline ||
-        data.draft ||
-        data.feedback ||
-        data.rewrite ||
-        data.result ||
+        data.outline ??
+        data.draft ??
+        data.feedback ??
+        data.rewrite ??
+        data.result ??
         "";
 
+      /* 若是大綱，記錄 outlineId & 清 refs */
+      if (step === "outline" && data.outlineId) {
+        setOutlineId(data.outlineId);
+        setReferences([]);
+      }
+
+      /* 扣點 */
       if (cost > 0) spend(cost);
+
       setResults((r) => ({ ...r, [step]: text }));
     } catch (e) {
       alert("❌ " + (e as Error).message);
     } finally {
       setLoading((l) => ({ ...l, [step]: false }));
+    }
+  }
+
+  /* ---------- 產生引用 ---------- */
+  async function generateReferences() {
+    if (!outlineId) return;
+    setRefLoading(true);
+    try {
+      const r = await fetch("/api/references/gather", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outlineId }),
+      }).then((x) => x.json());
+
+      if (r.error) throw new Error(r.error);
+      if (typeof r.remainingCredits === "number") setCredits(r.remainingCredits);
+      setReferences(r.saved || []);
+      alert(`🎉 已新增 ${r.spent} 筆引用！`);
+    } catch (e: any) {
+      alert("❌ " + e.message);
+    } finally {
+      setRefLoading(false);
     }
   }
 
@@ -169,9 +208,9 @@ export default function EasyWorkUI() {
 
           {/* 語言 / Tone */}
           <select
-          value={form.language}
-          className="mb-2 w-full border rounded px-2 py-1"
-          onChange={(e) => setForm({ ...form, language: e.target.value })}
+            value={form.language}
+            className="mb-2 w-full border rounded px-2 py-1"
+            onChange={(e) => setForm({ ...form, language: e.target.value })}
           >
             <option value="中文">中文</option>
             <option value="英文">英文</option>
@@ -237,7 +276,7 @@ export default function EasyWorkUI() {
             step="rewrite"
             mode={mode.rewrite}
             loading={loading.rewrite}
-            btnText="📝 GPT‑style 修訂"
+            btnText="📝 GPT-style 修訂"
             setMode={(v) =>
               setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))
             }
@@ -303,6 +342,40 @@ export default function EasyWorkUI() {
                         </span>
                       )}
                     </>
+                  )}
+
+                  {/* -------- Outline 面板：產生參考文獻 -------- */}
+                  {key === "outline" && outlineId && (
+                    <div className="mt-4">
+                      <Button
+                        isLoading={refLoading}
+                        className="bg-purple-600 text-white"
+                        onClick={generateReferences}
+                      >
+                        🔗 產生參考文獻
+                      </Button>
+
+                      {references.length > 0 && (
+                        <ul className="mt-3 space-y-1 text-sm">
+                          {references.map((ref, i) => (
+                            <li key={i} className="break-all">
+                              <span className="font-medium">
+                                {ref.sectionKey}
+                              </span>{" "}
+                              · {ref.title}{" "}
+                              <a
+                                href={ref.url}
+                                target="_blank"
+                                className="text-blue-600 underline"
+                              >
+                                link
+                              </a>
+                              {ref.source ? ` · ${ref.source}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
                 </Card>
               </TabsContent>
@@ -371,7 +444,7 @@ function ModeSelect({ step, value, onChange }: ModeSelectProps) {
 
 const modeLabel = (m: string) =>
   ({
-    free: "GPT‑3.5",
+    free: "GPT-3.5",
     flash: "Gemini Flash",
     pro: "Gemini Pro",
     undetectable: "Undetectable",
