@@ -134,3 +134,45 @@ model TopUpSubmission {
   imageUrl     String
   createdAt    DateTime  @default(now())
 }
+// === 新增：文章大綱（與 References 關聯） ===
+model Outline {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  content    String     @db.Text         // 大綱全文（可能較長）
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  references Reference[]
+
+  @@index([userId, createdAt])
+}
+
+// === 新增：參考文獻 ===
+model Reference {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  outlineId   String
+  outline     Outline    @relation(fields: [outlineId], references: [id], onDelete: Cascade)
+
+  sectionKey  String                     // 對應大綱段落（如 "I", "II.A" 或自定義 key）
+  title       String
+  url         String
+  doi         String?    @unique         // 單一 DOI 唯一；多筆 NULL 允許
+  source      String?                     // 期刊/機構/站名，例如 "Nature"、"NIST"、"Wikipedia"
+  authors     String?                     // "Alan Turing; John McCarthy"
+  publishedAt DateTime?
+  type        String     @default("OTHER")// JOURNAL|BOOK|REPORT|WIKI|NEWS|OTHER（先用字串）
+  summary     String?     @db.Text        // 短摘要（可選）
+  credibility Int        @default(0)      // 0~100 粗略可信度
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([userId, outlineId, sectionKey])
+  @@index([type, credibility])
+  @@unique([outlineId, url])             // 同一大綱避免重複存同一 URL
+}
