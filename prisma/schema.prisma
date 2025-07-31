@@ -32,32 +32,35 @@ model User {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  role          UserRole  @default(USER) // <-- 新增的 role 字段，默认是 USER
+  role          UserRole  @default(USER) // 默认 USER
 
   // NextAuth.js relations
-  accounts      Account[] // Link to the Account model for OAuth/credentials
-  sessions      Session[] // Link to the Session model for user sessions
+  accounts      Account[]
+  sessions      Session[]
 
   // Your custom relations
-  referralsMade Referral[] @relation("Referrer")
-  referralsGot  Referral[] @relation("Referee")
+  referralsMade Referral[]  @relation("Referrer")
+  referralsGot  Referral[]  @relation("Referee")
   transactions  Transaction[]
+
+  // ✅ 新增：與 Outline / Reference 的反向關聯（修正 P1012 必要）
+  outlines      Outline[]
+  references    Reference[]
 }
 
-// NextAuth.js Account Model (OAuth/credentials 的关键)
-// 包含 NextAuth.js 适配器期望的所有字段
+// NextAuth.js Account Model
 model Account {
   id                String  @id @default(cuid())
   userId            String
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text // 使用 @db.Text 防止长 token 溢出
-  access_token      String? @db.Text // 使用 @db.Text 防止长 token 溢出
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text // 使用 @db.Text 防止长 token 溢出
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -66,16 +69,15 @@ model Account {
 }
 
 // NextAuth.js Session Model
-// 已调整为 NextAuth.js 期望的 `sessionToken` 和 `expires` 字段
 model Session {
   id           String    @id @default(cuid())
-  sessionToken String    @unique // **关键修改：将 'token' 改为 'sessionToken'**
+  sessionToken String    @unique
   userId       String
-  expires      DateTime  // **关键修改：添加 'expires' 字段，NextAuth.js 需要**
+  expires      DateTime
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// NextAuth.js Verification Token Model (用于邮箱验证登录等)
+// NextAuth.js Verification Token Model
 model VerificationToken {
   identifier String
   token      String    @unique
@@ -84,9 +86,9 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// 您的现有自定义模型
+// 自定义模型
 
-// 手机验证码模型 (与 NextAuth.js 的 VerificationToken 区分)
+// 手机验证码模型
 model VerificationCode {
   phone     String   @id
   code      String
@@ -112,19 +114,18 @@ model Transaction {
   isFirstTopUp    Boolean  @default(false)
   createdAt       DateTime @default(now())
 
-  // 保留你原本的 string 類型，避免引入 enum 造成更多 schema 變化
+  // 字串類型，避免 enum 變更帶來的風險
   type            String   @default("GENERIC") // "TOPUP", "ADMIN_TOPUP", "USAGE", "REFERRAL_BONUS" ...
   description     String?
 
-  // ✅ 新增：記錄實際執行這次調整的人（多半是管理員的 userId 或 email）
+  // 執行人（多半是管理員 userId 或 email）
   performedBy     String?
 
-  // ✅ 新增：冪等鍵，避免重複加點（唯一）
+  // 冪等鍵，避免重複加點
   idempotencyKey  String?  @unique
 
   @@index([userId, createdAt])
 }
-
 
 model TopUpSubmission {
   id           String    @id @default(cuid())
@@ -134,6 +135,7 @@ model TopUpSubmission {
   imageUrl     String
   createdAt    DateTime  @default(now())
 }
+
 // === 新增：文章大綱（與 References 關聯） ===
 model Outline {
   id         String     @id @default(cuid())
@@ -161,8 +163,8 @@ model Reference {
   sectionKey  String                     // 對應大綱段落（如 "I", "II.A" 或自定義 key）
   title       String
   url         String
-  doi         String?    @unique         // 單一 DOI 唯一；多筆 NULL 允許
-  source      String?                     // 期刊/機構/站名，例如 "Nature"、"NIST"、"Wikipedia"
+  doi         String?    @unique         // 單一 DOI 唯一；多筆 NULL 允許（PostgreSQL）
+  source      String?                     // 期刊/機構/站名，如 "Nature"、"NIST"、"Wikipedia"
   authors     String?                     // "Alan Turing; John McCarthy"
   publishedAt DateTime?
   type        String     @default("OTHER")// JOURNAL|BOOK|REPORT|WIKI|NEWS|OTHER（先用字串）
