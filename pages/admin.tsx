@@ -61,7 +61,7 @@ export default function AdminDashboard() {
       return { list: payload as Tx[], hasMore: false };
     }
     if (Array.isArray((payload as any).data)) {
-      return { list: (payload as any).data as Tx[], hasMore: !!(payload as any).hasMore };
+      return { list: (payload as any).data as Tx[], hasMore: Boolean((payload as any).hasMore) };
     }
     if (Array.isArray((payload as any).transactions)) {
       return { list: (payload as any).transactions as Tx[], hasMore: false };
@@ -70,7 +70,8 @@ export default function AdminDashboard() {
   }
 
   async function fetchTransactions(nextPage = 1) {
-    if (!email) {
+    const trimmed = email.trim();
+    if (!trimmed) {
       setMessage('請先輸入 Email 以查詢紀錄');
       setTransactions([]);
       setHasMore(false);
@@ -82,7 +83,7 @@ export default function AdminDashboard() {
 
     try {
       const params = new URLSearchParams({
-        email,
+        email: trimmed,
         page: String(nextPage),
         pageSize: String(pageSize),
       });
@@ -96,9 +97,9 @@ export default function AdminDashboard() {
       } else {
         const { list, hasMore } = normalizeTx(json);
         setTransactions(list ?? []);
-        setHasMore(!!hasMore);
+        setHasMore(Boolean(hasMore));
         setPage(nextPage);
-        if (!list || list.length === 0) setMessage(`沒有找到 ${email} 的交易紀錄。`);
+        if (!list || list.length === 0) setMessage(`沒有找到 ${trimmed} 的交易紀錄。`);
       }
     } catch (err) {
       console.error('Fetch transactions failed:', err);
@@ -111,22 +112,21 @@ export default function AdminDashboard() {
   }
 
   async function refreshSelfCreditsIfNeeded(targetEmail?: string) {
-    // 只有當加點對象是目前登入者時才需要即時更新 header/前端顯示
     const currentEmail = session?.user?.email ?? '';
     if (!currentEmail || !targetEmail || currentEmail !== targetEmail) return;
 
     try {
-      const fresh = await fetch('/api/me').then(r => r.ok ? r.json() : null).catch(() => null);
+      const fresh = await fetch('/api/me').then((r) => (r.ok ? r.json() : null)).catch(() => null);
       const newCredits = fresh?.user?.credits;
 
       if (typeof newCredits === 'number') {
-        // A) 嘗試更新 next-auth session（若你的 next-auth 版本支援 useSession().update）
+        // A) 嘗試更新 next-auth session（如果當前 next-auth 支援）
         try {
-          await sessionUpdate?.({ credits: newCredits });
-        } catch (_) {
-          // ignore
+          await sessionUpdate?.({ credits: newCredits } as any);
+        } catch {
+          // 忽略失敗，不影響主要流程
         }
-        // B) 你如果有自己全域的 credits store，可在這裡一併 setCredits(newCredits)
+        // B) 若你有自訂全域 credits store，可在此同步 setCredits(newCredits)
       }
     } catch (e) {
       console.warn('刷新個人點數失敗（不影響主流程）：', e);
@@ -134,12 +134,13 @@ export default function AdminDashboard() {
   }
 
   async function handleAddPoints() {
-    if (!email || !points) {
+    const trimmed = email.trim();
+    if (!trimmed || !points) {
       setMessage('請輸入 Email 和 點數');
       return;
     }
     const n = Number(points);
-    if (!Number.isFinite(n) || n <= 0) {
+    if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
       setMessage('點數必須為正整數');
       return;
     }
@@ -151,7 +152,7 @@ export default function AdminDashboard() {
       const res = await fetch('/api/admin/add-points', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, amount: n }),
+        body: JSON.stringify({ email: trimmed, amount: n }),
       });
       const json = await res.json();
 
@@ -167,7 +168,7 @@ export default function AdminDashboard() {
       await fetchTransactions(page);
 
       // 2) 若加點對象是自己 → 即時刷新 header 的點數顯示
-      await refreshSelfCreditsIfNeeded(email);
+      await refreshSelfCreditsIfNeeded(trimmed);
     } catch (err) {
       console.error('Add points failed:', err);
       setMessage('❌ 網路錯誤或伺服器無響應');
@@ -205,8 +206,9 @@ export default function AdminDashboard() {
         <Input
           placeholder="使用者 Email"
           value={email}
-          onChange={(e) => setEmail(e.target.value.trim())}
+          onChange={(e) => setEmail(e.target.value)}
           type="email"
+          autoComplete="off"
         />
         <Input
           placeholder="加幾點？"
@@ -214,15 +216,16 @@ export default function AdminDashboard() {
           onChange={(e) => setPoints(e.target.value)}
           type="number"
           min={1}
+          inputMode="numeric"
         />
         <div className="flex gap-2">
-          <Button onClick={handleAddPoints} disabled={busy} className="flex-1">
+          <Button onClick={handleAddPoints} disabled={busy || !email.trim() || !points} className="flex-1">
             {busy ? '處理中...' : '➕ 加點'}
           </Button>
           <Button
             variant="outline"
             onClick={() => fetchTransactions(1)}
-            disabled={busy}
+            disabled={busy || !email.trim()}
           >
             {busy ? '查詢中...' : '🔄 查詢紀錄'}
           </Button>
@@ -244,8 +247,12 @@ export default function AdminDashboard() {
       <section>
         <ul className="text-sm space-y-2">
           {transactions.map((tx) => {
-            const emailShown = tx.user?.email ?? email || '(未知 Email)';
+            // ✅ 修正：避免混用 ?? 與 ||，改成先用 Nullish 再單獨處理空字串
+            const primary = tx.user?.email ?? email;
+            const emailShown = primary && primary.trim().length > 0 ? primary : '(未知 Email)';
+
             const created = typeof tx.createdAt === 'string' ? new Date(tx.createdAt) : tx.createdAt;
+
             return (
               <li key={tx.id} className="border rounded p-2 bg-gray-50">
                 ✉️ {emailShown} — 💰 {tx.amount} 點 —{' '}
