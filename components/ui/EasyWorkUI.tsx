@@ -373,6 +373,37 @@ export default function EasyWorkUI() {
     </div>
   );
 }
+// ----- Reference 型別與工具 -----
+type ReferenceItem = {
+  id: string;
+  sectionKey: string;
+  title: string;
+  url: string;
+  source?: string | null;
+  authors?: string | null;
+  publishedAt?: string | null; // 後端給 Date 也可；這裡用 string 容錯
+  credibility?: number | null;
+};
+
+function formatCitation(ref: ReferenceItem) {
+  const parts = [
+    ref.authors || '',
+    ref.title ? `“${ref.title}”` : '',
+    ref.source || '',
+    ref.publishedAt ? new Date(ref.publishedAt).toLocaleDateString() : '',
+    ref.url || '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 /* =============================================================== */
 interface StepBlockProps {
