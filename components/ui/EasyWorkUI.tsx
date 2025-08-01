@@ -3,23 +3,14 @@
 
 import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import Textarea from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
-import {
-  useCredits,
-  useSpend,
-  useSetCredits,
-} from "@/hooks/usePointStore";
+import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
 const steps: Array<{ key: StepName; label: string }> = [
@@ -103,11 +94,7 @@ export default function EasyWorkUI() {
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
-  async function callStep(
-    step: StepName,
-    endpoint: string,
-    body: Payload = {}
-  ) {
+  async function callStep(step: StepName, endpoint: string, body: Payload = {}) {
     const cost = getCost(step, mode[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
@@ -358,7 +345,7 @@ export default function EasyWorkUI() {
                     </>
                   )}
 
-                  {/* -------- Outline 面板：參考文獻 UI（升級版） -------- */}
+                  {/* -------- Outline 面板：參考文獻 UI -------- */}
                   {key === "outline" && outlineId && (
                     <ReferencesPanel
                       outlineId={outlineId}
@@ -408,8 +395,6 @@ function StepBlock({
     <>
       <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
       <Button
-        // 如果你的 Button 沒有 isLoading prop，可改成 disabled={loading}
-        isLoading={loading as any}
         disabled={!!loading}
         onClick={onClick}
         className="w-full bg-blue-500 text-white mb-3"
@@ -436,12 +421,17 @@ function ModeSelect({ step, value, onChange }: ModeSelectProps) {
       onChange={(e) => onChange(e.target.value)}
       className="mb-1 w-full border rounded px-2 py-1 text-sm"
     >
-      {(entries.length ? entries : [["free", 0]]).map(([m, c]) => (
-        <option key={m} value={m} disabled={Number(c) > 0 && credits < Number(c)}>
-          {modeLabel(m)} {Number(c) > 0 ? `(+${String(c)} 點)` : "(0 點)"}
-          {Number(c) > 0 && credits < Number(c) ? " — 點數不足" : ""}
-        </option>
-      ))}
+      {(entries.length ? entries : [["free", 0]]).map(([mRaw, cRaw]) => {
+        const m = String(mRaw);
+        const c = Number(cRaw);
+        const disabled = c > 0 && credits < c;
+
+        return (
+          <option key={m} value={m} disabled={disabled}>
+            {modeLabel(m)} {c > 0 ? `(+${c} 點)` : "(0 點)"}{disabled ? " — 點數不足" : ""}
+          </option>
+        );
+      })}
     </select>
   );
 }
@@ -454,7 +444,7 @@ const modeLabel = (m: string) =>
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
 
-/* ======================= 升級版參考文獻面板 ======================= */
+/* ======================= 參考文獻面板 ======================= */
 type ReferencesPanelProps = {
   outlineId: string;
   loading: boolean;
@@ -477,18 +467,10 @@ function ReferencesPanel({
       <div className="flex items-center justify-between">
         <h4 className="font-semibold">🔗 參考文獻</h4>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => onRefresh()}
-          >
+          <Button variant="outline" disabled={loading} onClick={() => onRefresh()}>
             重新整理
           </Button>
-          <Button
-            className="bg-purple-600 text-white"
-            disabled={loading}
-            onClick={() => onGenerate()}
-          >
+          <Button className="bg-purple-600 text-white" disabled={loading} onClick={() => onGenerate()}>
             {loading ? "產生中…" : "產生參考文獻"}
           </Button>
           <Button variant="outline" onClick={onExport}>
@@ -507,20 +489,12 @@ function ReferencesPanel({
         <ul className="mt-3 space-y-2 text-sm">
           {references.map((r) => (
             <li key={`${r.sectionKey}-${r.url}`} className="break-all">
-              <span className="font-medium">{r.sectionKey}</span> ·{" "}
-              {formatCitation(r)}{" "}
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-blue-600 underline"
-              >
+              <span className="font-medium">{r.sectionKey}</span> · {formatCitation(r)}{" "}
+              <a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
                 link
               </a>
               {typeof r.credibility === "number" ? (
-                <span className="ml-2 text-xs text-gray-500">
-                  可信度 {r.credibility}/100
-                </span>
+                <span className="ml-2 text-xs text-gray-500">可信度 {r.credibility}/100</span>
               ) : null}
             </li>
           ))}
@@ -538,11 +512,8 @@ function formatCitation(r: ReferenceItem): string {
   if (r.source) parts.push(r.source);
   if (r.doi) parts.push(`DOI: ${r.doi}`);
   if (r.publishedAt) {
-    const d =
-      typeof r.publishedAt === "string"
-        ? new Date(r.publishedAt)
-        : r.publishedAt;
-    if (!isNaN(d as any)) parts.push(new Date(d).toISOString().slice(0, 10));
+    const d = typeof r.publishedAt === "string" ? new Date(r.publishedAt) : r.publishedAt;
+    if (d && !isNaN(d as any)) parts.push(new Date(d).toISOString().slice(0, 10));
   }
   return parts.join(" · ");
 }
