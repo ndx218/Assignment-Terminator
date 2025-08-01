@@ -1,9 +1,8 @@
-// lib/utils.ts
-
 /**
- * 合併 className 工具函式
- * 範例：cn("btn", isActive && "active", isDisabled && "opacity-50")
+ * tailwind / className 合併小工具
+ *
+ * 例：cn('btn', isActive && 'active', isDisabled && 'opacity-50')
  */
-export function cn(...classes: (string | boolean | undefined | null)[]) {
+export function cn(...classes: Array<string | boolean | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
 }
