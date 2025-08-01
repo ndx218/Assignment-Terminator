@@ -5,10 +5,8 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 
 export const authOptions: NextAuthOptions = {
-  /* Prisma Adapter */
   adapter: PrismaAdapter(prisma),
 
-  /* OAuth Providers */
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_ID!,
@@ -16,19 +14,24 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
 
-  /* JWT-based session */
   session: { strategy: 'jwt' },
 
-  /* 把自訂欄位搬進 JWT，再回傳到 session */
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
+      // 首次登入：把 DB 欄位塞進 JWT
       if (user) {
         token.id      = (user as any).id;
         token.role    = (user as any).role;
         token.credits = (user as any).credits;
       }
+      // 前端呼叫 useSession().update(payload) 時即時覆寫
+      if (trigger === 'update' && session) {
+        if ('credits' in session) token.credits = (session as any).credits;
+        if ('role'    in session) token.role    = (session as any).role;
+      }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id      = token.id;
