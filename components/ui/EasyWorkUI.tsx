@@ -1,16 +1,25 @@
 /* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import Textarea from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
-import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
+import {
+  useCredits,
+  useSpend,
+  useSetCredits,
+} from "@/hooks/usePointStore";
 
 /* ---------------- 常量 ---------------- */
 const steps: Array<{ key: StepName; label: string }> = [
@@ -30,6 +39,20 @@ type ModeState = {
 };
 
 type Payload = Record<string, unknown>;
+
+/** 參考文獻型別（對應 /api/references/gather 回傳） */
+export type ReferenceItem = {
+  id?: string;
+  sectionKey: string;
+  title: string;
+  url: string;
+  doi?: string | null;
+  source?: string | null;
+  authors?: string | null;
+  publishedAt?: string | Date | null;
+  type?: string | null;
+  credibility?: number | null;
+};
 
 /* ==================================================================== */
 export default function EasyWorkUI() {
@@ -53,7 +76,7 @@ export default function EasyWorkUI() {
   const [results, setResults] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<Record<string, boolean>>({});
   const [outlineId, setOutlineId] = useState<string | null>(null);
-  const [references, setReferences] = useState<any[]>([]);
+  const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
   /* ----------- Loading ----------- */
@@ -80,7 +103,11 @@ export default function EasyWorkUI() {
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
-  async function callStep(step: StepName, endpoint: string, body: Payload = {}) {
+  async function callStep(
+    step: StepName,
+    endpoint: string,
+    body: Payload = {}
+  ) {
     const cost = getCost(step, mode[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
@@ -114,7 +141,7 @@ export default function EasyWorkUI() {
         setReferences([]);
       }
 
-      /* 扣點（前端狀態） */
+      /* 扣點 */
       if (cost > 0) spend(cost);
 
       setResults((r) => ({ ...r, [step]: text }));
@@ -138,7 +165,7 @@ export default function EasyWorkUI() {
 
       if (r.error) throw new Error(r.error);
       if (typeof r.remainingCredits === "number") setCredits(r.remainingCredits);
-      setReferences(r.saved || []);
+      setReferences((r.saved || []) as ReferenceItem[]);
       alert(`🎉 已新增 ${r.spent} 筆引用！`);
     } catch (e: any) {
       alert("❌ " + e.message);
@@ -331,38 +358,24 @@ export default function EasyWorkUI() {
                     </>
                   )}
 
-                  {/* -------- Outline 面板：產生參考文獻 -------- */}
+                  {/* -------- Outline 面板：參考文獻 UI（升級版） -------- */}
                   {key === "outline" && outlineId && (
-                    <div className="mt-4">
-                      <Button
-                        isLoading={refLoading}
-                        className="bg-purple-600 text-white"
-                        onClick={generateReferences}
-                      >
-                        🔗 產生參考文獻
-                      </Button>
-
-                      {references.length > 0 && (
-                        <ul className="mt-3 space-y-1 text-sm">
-                          {references.map((ref, i) => (
-                            <li key={i} className="break-all">
-                              <span className="font-medium">
-                                {ref.sectionKey}
-                              </span>{" "}
-                              · {ref.title}{" "}
-                              <a
-                                href={ref.url}
-                                target="_blank"
-                                className="text-blue-600 underline"
-                              >
-                                link
-                              </a>
-                              {ref.source ? ` · ${ref.source}` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                    <ReferencesPanel
+                      outlineId={outlineId}
+                      loading={refLoading}
+                      references={references}
+                      onGenerate={generateReferences}
+                      onRefresh={async () => {
+                        // 目前復用 gather；未來可提供 /api/references/list
+                        await generateReferences();
+                      }}
+                      onExport={() => {
+                        const text = references
+                          .map((r) => `【${r.sectionKey}】 ${formatCitation(r)}`)
+                          .join("\n");
+                        downloadTextFile("references.txt", text || "（無資料）");
+                      }}
+                    />
                   )}
                 </Card>
               </TabsContent>
@@ -372,37 +385,6 @@ export default function EasyWorkUI() {
       </div>
     </div>
   );
-}
-// ----- Reference 型別與工具 -----
-type ReferenceItem = {
-  id: string;
-  sectionKey: string;
-  title: string;
-  url: string;
-  source?: string | null;
-  authors?: string | null;
-  publishedAt?: string | null; // 後端給 Date 也可；這裡用 string 容錯
-  credibility?: number | null;
-};
-
-function formatCitation(ref: ReferenceItem) {
-  const parts = [
-    ref.authors || '',
-    ref.title ? `“${ref.title}”` : '',
-    ref.source || '',
-    ref.publishedAt ? new Date(ref.publishedAt).toLocaleDateString() : '',
-    ref.url || '',
-  ].filter(Boolean);
-  return parts.join(' · ');
-}
-
-function downloadTextFile(filename: string, content: string) {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(a.href);
 }
 
 /* =============================================================== */
@@ -426,8 +408,9 @@ function StepBlock({
     <>
       <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
       <Button
-        // 若你的 Button 沒有 isLoading prop，改成 disabled={loading}
-        isLoading={loading}
+        // 如果你的 Button 沒有 isLoading prop，可改成 disabled={loading}
+        isLoading={loading as any}
+        disabled={!!loading}
         onClick={onClick}
         className="w-full bg-blue-500 text-white mb-3"
       >
@@ -445,7 +428,7 @@ interface ModeSelectProps {
 function ModeSelect({ step, value, onChange }: ModeSelectProps) {
   const credits = useCredits();
   const costMap = MODE_COST[step] as Record<string, number>;
-  const entries = Object.entries(costMap ?? {}) as Array<[string, number]>; // 型別收斂，避免 union
+  const entries = Object.entries(costMap) as Array<[string, number]>;
 
   return (
     <select
@@ -453,16 +436,12 @@ function ModeSelect({ step, value, onChange }: ModeSelectProps) {
       onChange={(e) => onChange(e.target.value)}
       className="mb-1 w-full border rounded px-2 py-1 text-sm"
     >
-      {(entries.length ? entries : [["free", 0]]).map(([m, c]) => {
-        const mm = String(m);
-        const cc = Number(c);
-        return (
-          <option key={mm} value={mm} disabled={cc > 0 && credits < cc}>
-            {modeLabel(mm)} {cc > 0 ? `(+${cc} 點)` : "(0 點)"}
-            {cc > 0 && credits < cc ? " — 點數不足" : ""}
-          </option>
-        );
-      })}
+      {(entries.length ? entries : [["free", 0]]).map(([m, c]) => (
+        <option key={m} value={m} disabled={Number(c) > 0 && credits < Number(c)}>
+          {modeLabel(m)} {Number(c) > 0 ? `(+${String(c)} 點)` : "(0 點)"}
+          {Number(c) > 0 && credits < Number(c) ? " — 點數不足" : ""}
+        </option>
+      ))}
     </select>
   );
 }
@@ -474,3 +453,106 @@ const modeLabel = (m: string) =>
     pro: "Gemini Pro",
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
+
+/* ======================= 升級版參考文獻面板 ======================= */
+type ReferencesPanelProps = {
+  outlineId: string;
+  loading: boolean;
+  references: ReferenceItem[];
+  onGenerate: () => Promise<void> | void;
+  onRefresh: () => Promise<void> | void;
+  onExport: () => void;
+};
+
+function ReferencesPanel({
+  outlineId,
+  loading,
+  references,
+  onGenerate,
+  onRefresh,
+  onExport,
+}: ReferencesPanelProps) {
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold">🔗 參考文獻</h4>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            disabled={loading}
+            onClick={() => onRefresh()}
+          >
+            重新整理
+          </Button>
+          <Button
+            className="bg-purple-600 text-white"
+            disabled={loading}
+            onClick={() => onGenerate()}
+          >
+            {loading ? "產生中…" : "產生參考文獻"}
+          </Button>
+          <Button variant="outline" onClick={onExport}>
+            匯出 TXT
+          </Button>
+        </div>
+      </div>
+
+      <p className="text-xs text-gray-500 mt-1">
+        Outline ID：<span className="font-mono">{outlineId}</span>
+      </p>
+
+      {references.length === 0 ? (
+        <p className="text-sm text-gray-500 mt-3">尚未有參考文獻。</p>
+      ) : (
+        <ul className="mt-3 space-y-2 text-sm">
+          {references.map((r) => (
+            <li key={`${r.sectionKey}-${r.url}`} className="break-all">
+              <span className="font-medium">{r.sectionKey}</span> ·{" "}
+              {formatCitation(r)}{" "}
+              <a
+                href={r.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline"
+              >
+                link
+              </a>
+              {typeof r.credibility === "number" ? (
+                <span className="ml-2 text-xs text-gray-500">
+                  可信度 {r.credibility}/100
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ======================= 工具函式 ======================= */
+function formatCitation(r: ReferenceItem): string {
+  const parts: string[] = [];
+  if (r.title) parts.push(r.title);
+  if (r.authors) parts.push(r.authors);
+  if (r.source) parts.push(r.source);
+  if (r.doi) parts.push(`DOI: ${r.doi}`);
+  if (r.publishedAt) {
+    const d =
+      typeof r.publishedAt === "string"
+        ? new Date(r.publishedAt)
+        : r.publishedAt;
+    if (!isNaN(d as any)) parts.push(new Date(d).toISOString().slice(0, 10));
+  }
+  return parts.join(" · ");
+}
+
+function downloadTextFile(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
