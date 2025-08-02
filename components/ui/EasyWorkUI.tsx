@@ -127,14 +127,15 @@ export default function EasyWorkUI() {
   const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
-  /* ----------- Loading ----------- */
-  const [loading, setLoading] = useState<Record<StepName, boolean>>({
-    outline: false,
-    draft: false,
-    feedback: false,
-    rewrite: false,
-    final: false,
-  });
+  // ----------- Loading -----------
+const [loading, setLoading] = useState<Record<StepName, boolean>>({
+  outline: false,
+  draft: false,
+  feedback: false,
+  rewrite: false,
+  final: false,
+  refs: false, // ← 新增
+});
 
   /* ----------- 點數 ----------- */
   const credits = useCredits();
