@@ -27,6 +27,7 @@ type ModeState = {
   feedback: "free" | "flash";
   rewrite: "free" | "pro";
   final: "free" | "undetectable";
+  refs: "free", 
 };
 
 type Payload = Record<string, unknown>;
@@ -149,6 +150,7 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
     feedback: "free",
     rewrite: "free",
     final: "free",
+    refs: "free", 
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
