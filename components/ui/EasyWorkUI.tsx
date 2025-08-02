@@ -31,7 +31,7 @@ type ModeState = {
 
 type Payload = Record<string, unknown>;
 
-/** 參考文獻型別（對應 /api/references/gather 回傳） */
+/** 參考文獻型別（對應 /api/references/... 回傳） */
 export type ReferenceItem = {
   id?: string;
   sectionKey: string;
@@ -44,6 +44,63 @@ export type ReferenceItem = {
   type?: string | null;
   credibility?: number | null;
 };
+
+/* ---------- APA7 簡化格式（底部顯示/匯出用） ---------- */
+function formatCitationAPA7(r: {
+  authors?: string | null;
+  publishedAt?: string | Date | null;
+  title?: string;
+  source?: string | null;
+  doi?: string | null;
+  url?: string | null;
+}) {
+  const year = r.publishedAt
+    ? (typeof r.publishedAt === "string"
+        ? r.publishedAt.slice(0, 4)
+        : String((r.publishedAt as Date).getFullYear()))
+    : "n.d.";
+  const authors = r.authors ? r.authors + ". " : "";
+  const title = r.title ? `${r.title}.` : "";
+  const source = r.source ? ` ${r.source}.` : "";
+  const tail = r.doi
+    ? ` https://doi.org/${r.doi.replace(/^https?:\/\/(doi\.org\/)?/, "")}`
+    : r.url
+    ? ` ${r.url}`
+    : "";
+  return `${authors}(${year}). ${title}${source}${tail}`.replace(/\s+/g, " ").trim();
+}
+
+/* ---------- 把大綱字串切成「段落陣列」 ---------- */
+type OutlineSection = { key: string; title: string; text: string };
+
+function parseOutlineToSections(outline: string): OutlineSection[] {
+  if (!outline) return [];
+  const lines = outline.split(/\r?\n/).map((l) => l.trim());
+  const sections: OutlineSection[] = [];
+
+  const isHeader = (s: string) =>
+    /^([一二三四五六七八九十]+、|[0-9]+\.)/.test(s);
+
+  let current: OutlineSection | null = null;
+
+  for (const line of lines) {
+    if (!line) continue;
+    if (isHeader(line)) {
+      const key = line.replace(/[、.].*$/, "").trim(); // 「一」或「1」
+      const title = line.replace(/^([一二三四五六七八九十]+、|[0-9]+\.)\s*/, "").trim();
+      if (current) sections.push(current);
+      current = { key, title: title || key, text: "" };
+    } else if (current) {
+      current.text += (current.text ? "\n" : "") + line;
+    }
+  }
+  if (current) sections.push(current);
+
+  if (sections.length === 0) {
+    sections.push({ key: "I", title: "大綱", text: outline });
+  }
+  return sections.slice(0, 12);
+}
 
 /* ==================================================================== */
 export default function EasyWorkUI() {
@@ -113,7 +170,6 @@ export default function EasyWorkUI() {
       const data: any = await res.json();
       if (!res.ok) throw new Error(data.error || "伺服器回傳錯誤");
 
-      /* ---------- 解析回傳 ---------- */
       const text: string =
         data.outline ??
         data.draft ??
@@ -122,13 +178,11 @@ export default function EasyWorkUI() {
         data.result ??
         "";
 
-      /* 若是大綱，記錄 outlineId & 清 refs */
       if (step === "outline" && data.outlineId) {
         setOutlineId(data.outlineId);
         setReferences([]);
       }
 
-      /* 扣點 */
       if (cost > 0) spend(cost);
 
       setResults((r) => ({ ...r, [step]: text }));
@@ -139,7 +193,7 @@ export default function EasyWorkUI() {
     }
   }
 
-  /* ---------- 產生引用 ---------- */
+  /* ---------- 產生（整體）引用：舊功能保留 ---------- */
   async function generateReferences() {
     if (!outlineId) return;
     setRefLoading(true);
@@ -323,6 +377,7 @@ export default function EasyWorkUI() {
                       setResults((r) => ({ ...r, [key]: e.target.value }))
                     }
                   />
+
                   {results[key] && (
                     <>
                       <Button
@@ -345,7 +400,20 @@ export default function EasyWorkUI() {
                     </>
                   )}
 
-                  {/* -------- Outline 面板：參考文獻 UI -------- */}
+                  {/* ← 新增：每段落的參考文獻 Tabs（找候選＋儲存 1–3） */}
+                  {key === "outline" && outlineId && (results.outline?.trim()?.length > 0) && (
+                    <SectionReferenceTabs
+                      outlineId={outlineId}
+                      outlineText={results.outline}
+                      disabled={refLoading}
+                      onSaved={(saved, remain) => {
+                        setReferences((prev) => [...saved, ...prev]);
+                        if (typeof remain === "number") setCredits(remain);
+                      }}
+                    />
+                  )}
+
+                  {/* 保留底部總表（APA7 顯示／匯出） */}
                   {key === "outline" && outlineId && (
                     <ReferencesPanel
                       outlineId={outlineId}
@@ -353,12 +421,11 @@ export default function EasyWorkUI() {
                       references={references}
                       onGenerate={generateReferences}
                       onRefresh={async () => {
-                        // 目前復用 gather；未來可提供 /api/references/list
                         await generateReferences();
                       }}
                       onExport={() => {
                         const text = references
-                          .map((r) => `【${r.sectionKey}】 ${formatCitation(r)}`)
+                          .map((r) => `【${r.sectionKey}】 ${formatCitationAPA7(r)}`)
                           .join("\n");
                         downloadTextFile("references.txt", text || "（無資料）");
                       }}
@@ -394,11 +461,7 @@ function StepBlock({
   return (
     <>
       <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
-      <Button
-        disabled={!!loading}
-        onClick={onClick}
-        className="w-full bg-blue-500 text-white mb-3"
-      >
+      <Button disabled={!!loading} onClick={onClick} className="w-full bg-blue-500 text-white mb-3">
         {btnText}
       </Button>
     </>
@@ -425,7 +488,6 @@ function ModeSelect({ step, value, onChange }: ModeSelectProps) {
         const m = String(mRaw);
         const c = Number(cRaw);
         const disabled = c > 0 && credits < c;
-
         return (
           <option key={m} value={m} disabled={disabled}>
             {modeLabel(m)} {c > 0 ? `(+${c} 點)` : "(0 點)"}{disabled ? " — 點數不足" : ""}
@@ -444,7 +506,195 @@ const modeLabel = (m: string) =>
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
 
-/* ======================= 參考文獻面板 ======================= */
+/* ======================= 每段落參考文獻 Tabs ======================= */
+type SectionReferenceTabsProps = {
+  outlineId: string;
+  outlineText: string;
+  onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
+  disabled?: boolean;
+};
+
+function SectionReferenceTabs({
+  outlineId,
+  outlineText,
+  onSaved,
+  disabled,
+}: SectionReferenceTabsProps) {
+  const [active, setActive] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
+  const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({}); // key -> url -> checked
+
+  const sections = parseOutlineToSections(outlineText);
+  if (!sections.length) return null;
+
+  async function suggest(sec: OutlineSection) {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/references/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outlineId,
+          sectionKey: sec.key,
+          text: sec.text,
+          source: "web", // 先抓真實文獻，抓不到才 LLM
+        }),
+      }).then((x) => x.json());
+
+      if (r?.error) throw new Error(r.error);
+      const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
+        sectionKey: sec.key,
+        title: it.title,
+        url: it.url,
+        doi: it.doi ?? null,
+        source: it.source ?? null,
+        authors: it.authors ?? null,
+        publishedAt: it.publishedAt ?? null,
+        type: it.type ?? "OTHER",
+        credibility: it.credibility ?? null,
+      }));
+      setCandidates((prev) => ({ ...prev, [sec.key]: list }));
+      setChosen((prev) => ({ ...prev, [sec.key]: {} }));
+      setActive(sec.key);
+    } catch (e: any) {
+      alert("❌ " + (e.message || "取得候選失敗"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function save(sec: OutlineSection) {
+    const picked = (candidates[sec.key] || []).filter(
+      (c) => chosen[sec.key]?.[c.url]
+    );
+    if (picked.length === 0 || picked.length > 3) {
+      alert("請勾選 1~3 筆參考文獻");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const r = await fetch("/api/references/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outlineId,
+          items: picked,
+          mode: "web", // 每次扣 1 點，對應 points.ts 的 refs/web
+        }),
+      }).then((x) => x.json());
+
+      if (r?.error) throw new Error(r.error);
+
+      onSaved(r.saved || [], r.remainingCredits);
+      setCandidates((prev) => ({ ...prev, [sec.key]: [] }));
+      setChosen((prev) => ({ ...prev, [sec.key]: {} }));
+      alert(`🎉 已加入 ${picked.length} 筆（扣除 ${r.spent ?? 1} 點）`);
+    } catch (e: any) {
+      alert("❌ " + (e.message || "儲存失敗"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="mb-2 text-sm text-gray-600">
+        為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
+      </div>
+
+      <Tabs value={active || (sections[0]?.key ?? "")} onValueChange={setActive}>
+        <TabsList className="flex flex-wrap">
+          {sections.map((s) => (
+            <TabsTrigger key={s.key} value={s.key}>
+              {s.key}．{s.title}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {sections.map((s) => (
+          <TabsContent key={s.key} value={s.key}>
+            <div className="rounded border p-3 mt-3 bg-white">
+              <div className="text-sm text-gray-700 whitespace-pre-wrap mb-3">
+                {s.text}
+              </div>
+
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant="outline"
+                  disabled={disabled || loading}
+                  onClick={() => suggest(s)}
+                >
+                  {loading && active === s.key ? "搜尋中…" : "找 3 筆候選"}
+                </Button>
+                <Button
+                  className="bg-purple-600 text-white"
+                  disabled={disabled || loading || !(candidates[s.key]?.length)}
+                  onClick={() => save(s)}
+                >
+                  加入已勾選（1–3）
+                </Button>
+              </div>
+
+              {(candidates[s.key] || []).length === 0 ? (
+                <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
+              ) : (
+                <ul className="space-y-2">
+                  {candidates[s.key].map((c) => {
+                    const checked = !!chosen[s.key]?.[c.url];
+                    const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
+                    const disableCheck = !checked && count >= 3;
+                    return (
+                      <li key={c.url} className="text-sm">
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disableCheck}
+                            onChange={(e) =>
+                              setChosen((prev) => ({
+                                ...prev,
+                                [s.key]: { ...(prev[s.key] || {}), [c.url]: e.target.checked },
+                              }))
+                            }
+                          />
+                          <span className="break-all">
+                            <b>{c.title}</b>
+                            {c.authors ? ` · ${c.authors}` : ""}{" "}
+                            {c.source ? ` · ${c.source}` : ""}{" "}
+                            {c.doi ? ` · DOI: ${c.doi}` : ""}
+                            {typeof c.credibility === "number" ? (
+                              <span className="ml-2 text-xs text-gray-500">
+                                可信度 {c.credibility}/100
+                              </span>
+                            ) : null}
+                            <div>
+                              <a
+                                href={c.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 underline"
+                              >
+                                連結
+                              </a>
+                            </div>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+/* ======================= 底部參考文獻面板（總表） ======================= */
 type ReferencesPanelProps = {
   outlineId: string;
   loading: boolean;
@@ -489,7 +739,7 @@ function ReferencesPanel({
         <ul className="mt-3 space-y-2 text-sm">
           {references.map((r) => (
             <li key={`${r.sectionKey}-${r.url}`} className="break-all">
-              <span className="font-medium">{r.sectionKey}</span> · {formatCitation(r)}{" "}
+              <span className="font-medium">{r.sectionKey}</span> · {formatCitationAPA7(r)}{" "}
               <a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
                 link
               </a>
@@ -504,20 +754,7 @@ function ReferencesPanel({
   );
 }
 
-/* ======================= 工具函式 ======================= */
-function formatCitation(r: ReferenceItem): string {
-  const parts: string[] = [];
-  if (r.title) parts.push(r.title);
-  if (r.authors) parts.push(r.authors);
-  if (r.source) parts.push(r.source);
-  if (r.doi) parts.push(`DOI: ${r.doi}`);
-  if (r.publishedAt) {
-    const d = typeof r.publishedAt === "string" ? new Date(r.publishedAt) : r.publishedAt;
-    if (d && !isNaN(d as any)) parts.push(new Date(d).toISOString().slice(0, 10));
-  }
-  return parts.join(" · ");
-}
-
+/* ======================= 小工具 ======================= */
 function downloadTextFile(filename: string, text: string) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
