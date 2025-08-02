@@ -27,7 +27,7 @@ type ModeState = {
   feedback: "free" | "flash";
   rewrite: "free" | "pro";
   final: "free" | "undetectable";
-  refs: "free", 
+  refs: "free";
 };
 
 type Payload = Record<string, unknown>;
@@ -128,29 +128,29 @@ export default function EasyWorkUI() {
   const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
-  // ----------- Loading -----------
-const [loading, setLoading] = useState<Record<StepName, boolean>>({
-  outline: false,
-  draft: false,
-  feedback: false,
-  rewrite: false,
-  final: false,
-  refs: false, // ← 新增
-});
+  /* ----------- Loading（支援 refs） ----------- */
+  const [loading, setLoading] = useState<Record<StepName | "refs", boolean>>({
+    outline: false,
+    draft: false,
+    feedback: false,
+    rewrite: false,
+    final: false,
+    refs: false,
+  });
 
   /* ----------- 點數 ----------- */
   const credits = useCredits();
   const spend = useSpend();
   const setCredits = useSetCredits();
 
-  /* ----------- 模式 ----------- */
+  /* ----------- 模式（支援 refs） ----------- */
   const [mode, setMode] = useState<ModeState>({
     outline: "free",
     draft: "free",
     feedback: "free",
     rewrite: "free",
     final: "free",
-    refs: "free", 
+    refs: "free",
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
@@ -403,7 +403,7 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
                     </>
                   )}
 
-                  {/* ← 新增：每段落的參考文獻 Tabs（找候選＋儲存 1–3） */}
+                  {/* 每段落參考文獻 Tabs（找候選＋儲存 1–3） */}
                   {key === "outline" && outlineId && (results.outline?.trim()?.length > 0) && (
                     <SectionReferenceTabs
                       outlineId={outlineId}
@@ -416,7 +416,7 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
                     />
                   )}
 
-                  {/* 保留底部總表（APA7 顯示／匯出） */}
+                  {/* 底部「參考文獻」總表（APA7 顯示／匯出） */}
                   {key === "outline" && outlineId && (
                     <ReferencesPanel
                       outlineId={outlineId}
@@ -509,7 +509,7 @@ const modeLabel = (m: string) =>
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
 
-/* ======================= 每段落參考文獻 Tabs ======================= */
+/* ======================= 每段落參考文獻 Tabs（修正版） ======================= */
 type SectionReferenceTabsProps = {
   outlineId: string;
   outlineText: string;
@@ -523,16 +523,20 @@ function SectionReferenceTabs({
   onSaved,
   disabled,
 }: SectionReferenceTabsProps) {
-  const [active, setActive] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
-  const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({}); // key -> url -> checked
-
   const sections = parseOutlineToSections(outlineText);
+  const firstKey = sections[0]?.key ?? "";
+  const [active, setActive] = useState<string>(firstKey);
+  const [busyKey, setBusyKey] = useState<string | null>(null); // 哪一個段落正在忙
+
+  // key(段落) -> 候選清單
+  const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
+  // key(段落) -> url -> checked
+  const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({});
+
   if (!sections.length) return null;
 
   async function suggest(sec: OutlineSection) {
-    setLoading(true);
+    setBusyKey(sec.key);
     try {
       const r = await fetch("/api/references/suggest", {
         method: "POST",
@@ -541,11 +545,12 @@ function SectionReferenceTabs({
           outlineId,
           sectionKey: sec.key,
           text: sec.text,
-          source: "web", // 先抓真實文獻，抓不到才 LLM
+          source: "web",
         }),
       }).then((x) => x.json());
 
       if (r?.error) throw new Error(r.error);
+
       const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
         sectionKey: sec.key,
         title: it.title,
@@ -557,13 +562,14 @@ function SectionReferenceTabs({
         type: it.type ?? "OTHER",
         credibility: it.credibility ?? null,
       }));
+
       setCandidates((prev) => ({ ...prev, [sec.key]: list }));
       setChosen((prev) => ({ ...prev, [sec.key]: {} }));
       setActive(sec.key);
     } catch (e: any) {
       alert("❌ " + (e.message || "取得候選失敗"));
     } finally {
-      setLoading(false);
+      setBusyKey(null);
     }
   }
 
@@ -576,7 +582,7 @@ function SectionReferenceTabs({
       return;
     }
 
-    setLoading(true);
+    setBusyKey(sec.key);
     try {
       const r = await fetch("/api/references/save", {
         method: "POST",
@@ -584,7 +590,7 @@ function SectionReferenceTabs({
         body: JSON.stringify({
           outlineId,
           items: picked,
-          mode: "web", // 每次扣 1 點，對應 points.ts 的 refs/web
+          mode: "web", // 每次扣 1 點
         }),
       }).then((x) => x.json());
 
@@ -597,7 +603,7 @@ function SectionReferenceTabs({
     } catch (e: any) {
       alert("❌ " + (e.message || "儲存失敗"));
     } finally {
-      setLoading(false);
+      setBusyKey(null);
     }
   }
 
@@ -606,114 +612,116 @@ function SectionReferenceTabs({
       <div className="mb-2 text-sm text-gray-600">
         為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
-/* --- 段落 Tabs（非受控）--- */
-<Tabs defaultValue={active ?? sections[0]?.key ?? ""}>
-  {/* 用外層 div 控制排版，不把 className 放在 TabsList 上 */}
-  <div className="flex flex-wrap">
-    <TabsList>
-      {sections.map((s) => (
-        <TabsTrigger
-          key={s.key}
-          value={s.key}
-          /* 你的 TabsTrigger 型別提供 active / setActive，而不是 onClick */
-          active={active ?? sections[0]?.key ?? ""}
-          setActive={setActive}
-        >
-          {s.label ?? s.title}
-        </TabsTrigger>
-      ))}
-    </TabsList>
-  </div>
 
-  {sections.map((s) => (
-    <TabsContent key={s.key} value={s.key}>
-      <div className="mt-3">
-        <div className="text-sm text-gray-700 mb-2">
-          <span className="font-medium">{s.title}</span>
-          {s.text ? (
-            <span className="text-gray-500">
-              {" "}
-              · {s.text.slice(0, 60)}
-              {s.text.length > 60 ? "…" : ""}
-            </span>
-          ) : null}
+      {/* 受控 Tabs（shadcn 正確用法） */}
+      <Tabs value={active} onValueChange={setActive}>
+        {/* 用外層 div 控制排版；不把 className 放在 TabsList 上，避免型別衝突 */}
+        <div className="flex flex-wrap">
+          <TabsList>
+            {sections.map((s) => (
+              <TabsTrigger key={s.key} value={s.key}>
+                {s.title || s.key}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
 
-        <div className="flex gap-2 mb-2">
-          <Button
-            variant="outline"
-            disabled={disabled || busy}
-            onClick={() => suggest(s)}
-          >
-            {busy && active === s.key ? "搜尋中…" : "找 3 筆候選"}
-          </Button>
-          <Button
-            className="bg-purple-600 text-white"
-            disabled={disabled || busy || !(candidates[s.key]?.length)}
-            onClick={() => save(s)}
-          >
-            加入已勾選（1–3）
-          </Button>
-        </div>
+        {sections.map((s) => (
+          <TabsContent key={s.key} value={s.key}>
+            <div className="mt-3">
+              <div className="text-sm text-gray-700 mb-2">
+                <span className="font-medium">{s.title}</span>
+                {s.text ? (
+                  <span className="text-gray-500">
+                    {" "}
+                    · {s.text.slice(0, 60)}
+                    {s.text.length > 60 ? "…" : ""}
+                  </span>
+                ) : null}
+              </div>
 
-        {(candidates[s.key] || []).length === 0 ? (
-          <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
-        ) : (
-          <ul className="space-y-2">
-            {candidates[s.key].map((c) => {
-              const checked = !!chosen[s.key]?.[c.url];
-              const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
-              const disableCheck = !checked && count >= 3;
-              return (
-                <li key={c.url} className="text-sm">
-                  <label className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      disabled={disableCheck}
-                      onChange={(e) =>
-                        setChosen((prev) => ({
-                          ...prev,
-                          [s.key]: {
-                            ...(prev[s.key] || {}),
-                            [c.url]: e.target.checked,
-                          },
-                        }))
-                      }
-                    />
-                    <span className="break-all">
-                      <b>{c.title}</b>
-                      {c.authors ? ` · ${c.authors}` : ""}{" "}
-                      {c.source ? ` · ${c.source}` : ""}{" "}
-                      {c.doi ? ` · DOI: ${c.doi}` : ""}
-                      {typeof c.credibility === "number" ? (
-                        <span className="ml-2 text-xs text-gray-500">
-                          可信度 {c.credibility}/100
-                        </span>
-                      ) : null}
-                      <div>
-                        <a
-                          href={c.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 underline"
-                        >
-                          連結
-                        </a>
-                      </div>
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </TabsContent>
-  ))}
-</Tabs>
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant="outline"
+                  disabled={disabled || busyKey === s.key}
+                  onClick={() => suggest(s)}
+                >
+                  {busyKey === s.key ? "搜尋中…" : "找 3 筆候選"}
+                </Button>
+                <Button
+                  className="bg-purple-600 text-white"
+                  disabled={
+                    disabled ||
+                    busyKey === s.key ||
+                    !(candidates[s.key]?.length)
+                  }
+                  onClick={() => save(s)}
+                >
+                  加入已勾選（1–3）
+                </Button>
+              </div>
 
-      /* ======================= 底部參考文獻面板（總表） ======================= */
+              {(candidates[s.key] || []).length === 0 ? (
+                <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
+              ) : (
+                <ul className="space-y-2">
+                  {candidates[s.key].map((c) => {
+                    const checked = !!chosen[s.key]?.[c.url];
+                    const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
+                    const disableCheck = !checked && count >= 3;
+                    return (
+                      <li key={c.url} className="text-sm">
+                        <label className="flex items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disableCheck}
+                            onChange={(e) =>
+                              setChosen((prev) => ({
+                                ...prev,
+                                [s.key]: {
+                                  ...(prev[s.key] || {}),
+                                  [c.url]: e.target.checked,
+                                },
+                              }))
+                            }
+                          />
+                          <span className="break-all">
+                            <b>{c.title}</b>
+                            {c.authors ? ` · ${c.authors}` : ""}{" "}
+                            {c.source ? ` · ${c.source}` : ""}{" "}
+                            {c.doi ? ` · DOI: ${c.doi}` : ""}
+                            {typeof c.credibility === "number" ? (
+                              <span className="ml-2 text-xs text-gray-500">
+                                可信度 {c.credibility}/100
+                              </span>
+                            ) : null}
+                            <div>
+                              <a
+                                href={c.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 underline"
+                              >
+                                連結
+                              </a>
+                            </div>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
+
+/* ======================= 底部參考文獻面板（總表） ======================= */
 type ReferencesPanelProps = {
   outlineId: string;
   loading: boolean;
@@ -739,7 +747,11 @@ function ReferencesPanel({
           <Button variant="outline" disabled={loading} onClick={() => onRefresh()}>
             重新整理
           </Button>
-          <Button className="bg-purple-600 text-white" disabled={loading} onClick={() => onGenerate()}>
+          <Button
+            className="bg-purple-600 text-white"
+            disabled={loading}
+            onClick={() => onGenerate()}
+          >
             {loading ? "產生中…" : "產生參考文獻"}
           </Button>
           <Button variant="outline" onClick={onExport}>
@@ -763,7 +775,9 @@ function ReferencesPanel({
                 link
               </a>
               {typeof r.credibility === "number" ? (
-                <span className="ml-2 text-xs text-gray-500">可信度 {r.credibility}/100</span>
+                <span className="ml-2 text-xs text-gray-500">
+                  可信度 {r.credibility}/100
+                </span>
               ) : null}
             </li>
           ))}
@@ -773,3 +787,13 @@ function ReferencesPanel({
   );
 }
 
+/* ======================= 小工具 ======================= */
+function downloadTextFile(filename: string, text: string) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
