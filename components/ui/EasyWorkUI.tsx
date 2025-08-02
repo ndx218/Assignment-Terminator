@@ -27,13 +27,12 @@ type ModeState = {
   feedback: "free" | "flash";
   rewrite: "free" | "pro";
   final: "free" | "undetectable";
-  /** 你專案的 StepName 目前含有 'refs'，這裡保留為 'free' 以相容 */
-  refs: "free";
+  refs: "free", 
 };
 
 type Payload = Record<string, unknown>;
 
-/** 參考文獻型別（/api/references/... 回傳） */
+/** 參考文獻型別（對應 /api/references/... 回傳） */
 export type ReferenceItem = {
   id?: string;
   sectionKey: string;
@@ -57,9 +56,9 @@ function formatCitationAPA7(r: {
   url?: string | null;
 }) {
   const year = r.publishedAt
-    ? typeof r.publishedAt === "string"
-      ? r.publishedAt.slice(0, 4)
-      : String((r.publishedAt as Date).getFullYear())
+    ? (typeof r.publishedAt === "string"
+        ? r.publishedAt.slice(0, 4)
+        : String((r.publishedAt as Date).getFullYear()))
     : "n.d.";
   const authors = r.authors ? r.authors + ". " : "";
   const title = r.title ? `${r.title}.` : "";
@@ -73,31 +72,34 @@ function formatCitationAPA7(r: {
 }
 
 /* ---------- 把大綱字串切成「段落陣列」 ---------- */
-type OutlineSection = { key: string; title: string; text: string; label?: string };
+type OutlineSection = { key: string; title: string; text: string };
 
 function parseOutlineToSections(outline: string): OutlineSection[] {
   if (!outline) return [];
   const lines = outline.split(/\r?\n/).map((l) => l.trim());
   const sections: OutlineSection[] = [];
 
-  const isHeader = (s: string) => /^([一二三四五六七八九十]+、|[0-9]+\.)/.test(s);
+  const isHeader = (s: string) =>
+    /^([一二三四五六七八九十]+、|[0-9]+\.)/.test(s);
 
   let current: OutlineSection | null = null;
 
   for (const line of lines) {
     if (!line) continue;
     if (isHeader(line)) {
-      const num = line.match(/^([一二三四五六七八九十]+|[0-9]+)/)?.[1] ?? "";
-      const key = num;
+      const key = line.replace(/[、.].*$/, "").trim(); // 「一」或「1」
       const title = line.replace(/^([一二三四五六七八九十]+、|[0-9]+\.)\s*/, "").trim();
       if (current) sections.push(current);
-      current = { key, title: title || key, text: "", label: title || key };
+      current = { key, title: title || key, text: "" };
     } else if (current) {
       current.text += (current.text ? "\n" : "") + line;
     }
   }
   if (current) sections.push(current);
-  if (sections.length === 0) sections.push({ key: "I", title: "大綱", text: outline, label: "大綱" });
+
+  if (sections.length === 0) {
+    sections.push({ key: "I", title: "大綱", text: outline });
+  }
   return sections.slice(0, 12);
 }
 
@@ -126,16 +128,15 @@ export default function EasyWorkUI() {
   const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
-  /* ----------- Loading（含 refs） ----------- */
-  type LoadingMap = Partial<Record<StepName, boolean>>;
-  const [loading, setLoading] = useState<LoadingMap>({
-    outline: false,
-    draft: false,
-    feedback: false,
-    rewrite: false,
-    final: false,
-    refs: false, // 你的 StepName 包含 'refs'，補上避免 TS 報錯
-  });
+  // ----------- Loading -----------
+const [loading, setLoading] = useState<Record<StepName, boolean>>({
+  outline: false,
+  draft: false,
+  feedback: false,
+  rewrite: false,
+  final: false,
+  refs: false, // ← 新增
+});
 
   /* ----------- 點數 ----------- */
   const credits = useCredits();
@@ -149,20 +150,20 @@ export default function EasyWorkUI() {
     feedback: "free",
     rewrite: "free",
     final: "free",
-    refs: "free",
+    refs: "free", 
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
   async function callStep(step: StepName, endpoint: string, body: Payload = {}) {
-    const cost = getCost(step, (mode as any)[step]);
+    const cost = getCost(step, mode[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
       return;
     }
 
-    setLoading((l) => ({ ...(l || {}), [step]: true } as LoadingMap));
+    setLoading((l) => ({ ...l, [step]: true }));
     try {
-      const payload: Payload = { ...body, mode: (mode as any)[step] };
+      const payload: Payload = { ...body, mode: mode[step] };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -191,11 +192,11 @@ export default function EasyWorkUI() {
     } catch (e) {
       alert("❌ " + (e as Error).message);
     } finally {
-      setLoading((l) => ({ ...(l || {}), [step]: false } as LoadingMap));
+      setLoading((l) => ({ ...l, [step]: false }));
     }
   }
 
-  /* ---------- 產生（整體）引用：保留舊功能 ---------- */
+  /* ---------- 產生（整體）引用：舊功能保留 ---------- */
   async function generateReferences() {
     if (!outlineId) return;
     setRefLoading(true);
@@ -292,18 +293,22 @@ export default function EasyWorkUI() {
           <StepBlock
             step="outline"
             mode={mode.outline}
-            loading={!!loading.outline}
+            loading={loading.outline}
             btnText="🧠 產生大綱"
-            setMode={(v) => setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))
+            }
             onClick={() => callStep("outline", "/api/outline", form)}
           />
 
           <StepBlock
             step="draft"
             mode={mode.draft}
-            loading={!!loading.draft}
+            loading={loading.draft}
             btnText="✍️ 草稿產生"
-            setMode={(v) => setMode((m) => ({ ...m, draft: v as ModeState["draft"] }))}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, draft: v as ModeState["draft"] }))
+            }
             onClick={() =>
               callStep("draft", "/api/draft", {
                 ...form,
@@ -315,28 +320,40 @@ export default function EasyWorkUI() {
           <StepBlock
             step="feedback"
             mode={mode.feedback}
-            loading={!!loading.feedback}
+            loading={loading.feedback}
             btnText="🧑‍🏫 教師評論"
-            setMode={(v) => setMode((m) => ({ ...m, feedback: v as ModeState["feedback"] }))}
-            onClick={() => callStep("feedback", "/api/feedback", { text: results.draft })}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, feedback: v as ModeState["feedback"] }))
+            }
+            onClick={() =>
+              callStep("feedback", "/api/feedback", { text: results.draft })
+            }
           />
 
           <StepBlock
             step="rewrite"
             mode={mode.rewrite}
-            loading={!!loading.rewrite}
+            loading={loading.rewrite}
             btnText="📝 GPT-style 修訂"
-            setMode={(v) => setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))}
-            onClick={() => callStep("rewrite", "/api/rewrite", { text: results.draft })}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, rewrite: v as ModeState["rewrite"] }))
+            }
+            onClick={() =>
+              callStep("rewrite", "/api/rewrite", { text: results.draft })
+            }
           />
 
           <StepBlock
             step="final"
             mode={mode.final}
-            loading={!!loading.final}
+            loading={loading.final}
             btnText="🤖 最終人性化優化"
-            setMode={(v) => setMode((m) => ({ ...m, final: v as ModeState["final"] }))}
-            onClick={() => callStep("final", "/api/undetectable", { text: results.rewrite })}
+            setMode={(v) =>
+              setMode((m) => ({ ...m, final: v as ModeState["final"] }))
+            }
+            onClick={() =>
+              callStep("final", "/api/undetectable", { text: results.rewrite })
+            }
           />
         </div>
 
@@ -355,12 +372,13 @@ export default function EasyWorkUI() {
               <TabsContent key={key} value={key}>
                 <Card className="p-4 mt-4 bg-gray-50 relative">
                   <h3 className="font-semibold mb-2">{label}：</h3>
-
                   <Textarea
                     rows={1}
                     className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
                     value={results[key] || ""}
-                    onChange={(e) => setResults((r) => ({ ...r, [key]: e.target.value }))}
+                    onChange={(e) =>
+                      setResults((r) => ({ ...r, [key]: e.target.value }))
+                    }
                   />
 
                   {results[key] && (
@@ -386,7 +404,7 @@ export default function EasyWorkUI() {
                   )}
 
                   {/* ← 新增：每段落的參考文獻 Tabs（找候選＋儲存 1–3） */}
-                  {key === "outline" && outlineId && results.outline?.trim() && (
+                  {key === "outline" && outlineId && (results.outline?.trim()?.length > 0) && (
                     <SectionReferenceTabs
                       outlineId={outlineId}
                       outlineText={results.outline}
@@ -398,7 +416,7 @@ export default function EasyWorkUI() {
                     />
                   )}
 
-                  {/* 底部總表（APA7 顯示／匯出） */}
+                  {/* 保留底部總表（APA7 顯示／匯出） */}
                   {key === "outline" && outlineId && (
                     <ReferencesPanel
                       outlineId={outlineId}
@@ -435,7 +453,14 @@ interface StepBlockProps {
   setMode: (v: string) => void;
   onClick: () => void;
 }
-function StepBlock({ step, mode, setMode, loading, btnText, onClick }: StepBlockProps) {
+function StepBlock({
+  step,
+  mode,
+  setMode,
+  loading,
+  btnText,
+  onClick,
+}: StepBlockProps) {
   return (
     <>
       <ModeSelect step={step} value={mode} onChange={(v) => setMode(v)} />
@@ -492,9 +517,14 @@ type SectionReferenceTabsProps = {
   disabled?: boolean;
 };
 
-function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: SectionReferenceTabsProps) {
+function SectionReferenceTabs({
+  outlineId,
+  outlineText,
+  onSaved,
+  disabled,
+}: SectionReferenceTabsProps) {
   const [active, setActive] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
   const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({}); // key -> url -> checked
 
@@ -502,7 +532,7 @@ function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: Sec
   if (!sections.length) return null;
 
   async function suggest(sec: OutlineSection) {
-    setBusy(true);
+    setLoading(true);
     try {
       const r = await fetch("/api/references/suggest", {
         method: "POST",
@@ -511,7 +541,7 @@ function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: Sec
           outlineId,
           sectionKey: sec.key,
           text: sec.text,
-          source: "web",
+          source: "web", // 先抓真實文獻，抓不到才 LLM
         }),
       }).then((x) => x.json());
 
@@ -533,18 +563,20 @@ function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: Sec
     } catch (e: any) {
       alert("❌ " + (e.message || "取得候選失敗"));
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
 
   async function save(sec: OutlineSection) {
-    const picked = (candidates[sec.key] || []).filter((c) => chosen[sec.key]?.[c.url]);
+    const picked = (candidates[sec.key] || []).filter(
+      (c) => chosen[sec.key]?.[c.url]
+    );
     if (picked.length === 0 || picked.length > 3) {
       alert("請勾選 1~3 筆參考文獻");
       return;
     }
 
-    setBusy(true);
+    setLoading(true);
     try {
       const r = await fetch("/api/references/save", {
         method: "POST",
@@ -552,7 +584,7 @@ function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: Sec
         body: JSON.stringify({
           outlineId,
           items: picked,
-          mode: "web", // 每次扣 1 點（對應 points.ts 的 refs/web）
+          mode: "web", // 每次扣 1 點，對應 points.ts 的 refs/web
         }),
       }).then((x) => x.json());
 
@@ -565,156 +597,118 @@ function SectionReferenceTabs({ outlineId, outlineText, onSaved, disabled }: Sec
     } catch (e: any) {
       alert("❌ " + (e.message || "儲存失敗"));
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
 
   return (
     <div className="mt-4 border-t pt-3">
-      <div className="mb-2 text-sm text-gray-600">為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）</div>
-
-      {/* 段落 Tabs（依照你的 Tabs API：只支援 defaultValue；TabsTrigger 使用 active/setActive） */}
-      <Tabs defaultValue={active ?? sections[0]?.key ?? ""}>
-        {/* 不在 TabsList 上放 className，避免型別不匹配 */}
-        <div className="flex flex-wrap">
-          <TabsList>
-            {sections.map((s) => (
-              <TabsTrigger key={s.key} value={s.key} active={active ?? sections[0]?.key ?? ""} setActive={setActive}>
-                {s.label ?? s.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
-
-        {sections.map((s) => (
-          <TabsContent key={s.key} value={s.key}>
-            <div className="mt-3">
-              <div className="text-sm text-gray-700 mb-2">
-                <span className="font-medium">{s.title}</span>
-                {s.text ? <span className="text-gray-500"> · {s.text.slice(0, 60)}{s.text.length > 60 ? "…" : ""}</span> : null}
-              </div>
-
-              <div className="flex gap-2 mb-2">
-                <Button variant="outline" disabled={disabled || busy} onClick={() => suggest(s)}>
-                  {busy && (active === s.key) ? "搜尋中…" : "找 3 筆候選"}
-                </Button>
-                <Button
-                  className="bg-purple-600 text-white"
-                  disabled={disabled || busy || !(candidates[s.key]?.length)}
-                  onClick={() => save(s)}
-                >
-                  加入已勾選（1–3）
-                </Button>
-              </div>
-
-              {(candidates[s.key] || []).length === 0 ? (
-                <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
-              ) : (
-                <ul className="space-y-2">
-                  {candidates[s.key].map((c) => {
-                    const checked = !!chosen[s.key]?.[c.url];
-                    const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
-                    const disableCheck = !checked && count >= 3;
-                    return (
-                      <li key={c.url} className="text-sm">
-                        <label className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disableCheck}
-                            onChange={(e) =>
-                              setChosen((prev) => ({
-                                ...prev,
-                                [s.key]: { ...(prev[s.key] || {}), [c.url]: e.target.checked },
-                              }))
-                            }
-                          />
-                          <span className="break-all">
-                            <b>{c.title}</b>
-                            {c.authors ? ` · ${c.authors}` : ""} {c.source ? ` · ${c.source}` : ""} {c.doi ? ` · DOI: ${c.doi}` : ""}
-                            {typeof c.credibility === "number" ? (
-                              <span className="ml-2 text-xs text-gray-500">可信度 {c.credibility}/100</span>
-                            ) : null}
-                            <div>
-                              <a href={c.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                                連結
-                              </a>
-                            </div>
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-}
-
-/* ======================= 底部參考文獻面板（總表） ======================= */
-type ReferencesPanelProps = {
-  outlineId: string;
-  loading: boolean;
-  references: ReferenceItem[];
-  onGenerate: () => Promise<void> | void;
-  onRefresh: () => Promise<void> | void;
-  onExport: () => void;
-};
-
-function ReferencesPanel({ outlineId, loading, references, onGenerate, onRefresh, onExport }: ReferencesPanelProps) {
-  return (
-    <div className="mt-4 border-t pt-3">
-      <div className="flex items-center justify-between">
-        <h4 className="font-semibold">🔗 參考文獻</h4>
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={loading} onClick={() => onRefresh()}>
-            重新整理
-          </Button>
-          <Button className="bg-purple-600 text-white" disabled={loading} onClick={() => onGenerate()}>
-            {loading ? "產生中…" : "產生參考文獻"}
-          </Button>
-          <Button variant="outline" onClick={onExport}>
-            匯出 TXT
-          </Button>
-        </div>
+      <div className="mb-2 text-sm text-gray-600">
+        為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
+/* --- 段落 Tabs（非受控）--- */
+<Tabs defaultValue={active ?? sections[0]?.key ?? ""}>
+  {/* 用外層 div 控制排版，不把 className 放在 TabsList 上 */}
+  <div className="flex flex-wrap">
+    <TabsList>
+      {sections.map((s) => (
+        <TabsTrigger
+          key={s.key}
+          value={s.key}
+          /* 你的 TabsTrigger 型別提供 active / setActive，而不是 onClick */
+          active={active ?? sections[0]?.key ?? ""}
+          setActive={setActive}
+        >
+          {s.label ?? s.title}
+        </TabsTrigger>
+      ))}
+    </TabsList>
+  </div>
 
-      <p className="text-xs text-gray-500 mt-1">
-        Outline ID：<span className="font-mono">{outlineId}</span>
-      </p>
+  {sections.map((s) => (
+    <TabsContent key={s.key} value={s.key}>
+      <div className="mt-3">
+        <div className="text-sm text-gray-700 mb-2">
+          <span className="font-medium">{s.title}</span>
+          {s.text ? (
+            <span className="text-gray-500">
+              {" "}
+              · {s.text.slice(0, 60)}
+              {s.text.length > 60 ? "…" : ""}
+            </span>
+          ) : null}
+        </div>
 
-      {references.length === 0 ? (
-        <p className="text-sm text-gray-500 mt-3">尚未有參考文獻。</p>
-      ) : (
-        <ul className="mt-3 space-y-2 text-sm">
-          {references.map((r) => (
-            <li key={`${r.sectionKey}-${r.url}`} className="break-all">
-              <span className="font-medium">{r.sectionKey}</span> · {formatCitationAPA7(r)}{" "}
-              <a href={r.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                link
-              </a>
-              {typeof r.credibility === "number" ? (
-                <span className="ml-2 text-xs text-gray-500">可信度 {r.credibility}/100</span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+        <div className="flex gap-2 mb-2">
+          <Button
+            variant="outline"
+            disabled={disabled || busy}
+            onClick={() => suggest(s)}
+          >
+            {busy && active === s.key ? "搜尋中…" : "找 3 筆候選"}
+          </Button>
+          <Button
+            className="bg-purple-600 text-white"
+            disabled={disabled || busy || !(candidates[s.key]?.length)}
+            onClick={() => save(s)}
+          >
+            加入已勾選（1–3）
+          </Button>
+        </div>
 
-/* ======================= 小工具 ======================= */
-function downloadTextFile(filename: string, text: string) {
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+        {(candidates[s.key] || []).length === 0 ? (
+          <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
+        ) : (
+          <ul className="space-y-2">
+            {candidates[s.key].map((c) => {
+              const checked = !!chosen[s.key]?.[c.url];
+              const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
+              const disableCheck = !checked && count >= 3;
+              return (
+                <li key={c.url} className="text-sm">
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disableCheck}
+                      onChange={(e) =>
+                        setChosen((prev) => ({
+                          ...prev,
+                          [s.key]: {
+                            ...(prev[s.key] || {}),
+                            [c.url]: e.target.checked,
+                          },
+                        }))
+                      }
+                    />
+                    <span className="break-all">
+                      <b>{c.title}</b>
+                      {c.authors ? ` · ${c.authors}` : ""}{" "}
+                      {c.source ? ` · ${c.source}` : ""}{" "}
+                      {c.doi ? ` · DOI: ${c.doi}` : ""}
+                      {typeof c.credibility === "number" ? (
+                        <span className="ml-2 text-xs text-gray-500">
+                          可信度 {c.credibility}/100
+                        </span>
+                      ) : null}
+                      <div>
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 underline"
+                        >
+                          連結
+                        </a>
+                      </div>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </TabsContent>
+  ))}
+</Tabs>
