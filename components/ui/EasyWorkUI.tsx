@@ -1,7 +1,7 @@
 /* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,6 @@ type ModeState = {
   feedback: "free" | "flash";
   rewrite: "free" | "pro";
   final: "free" | "undetectable";
-  refs: "free", 
 };
 
 type Payload = Record<string, unknown>;
@@ -56,9 +55,9 @@ function formatCitationAPA7(r: {
   url?: string | null;
 }) {
   const year = r.publishedAt
-    ? (typeof r.publishedAt === "string"
-        ? r.publishedAt.slice(0, 4)
-        : String((r.publishedAt as Date).getFullYear()))
+    ? typeof r.publishedAt === "string"
+      ? r.publishedAt.slice(0, 4)
+      : String((r.publishedAt as Date).getFullYear())
     : "n.d.";
   const authors = r.authors ? r.authors + ". " : "";
   const title = r.title ? `${r.title}.` : "";
@@ -72,7 +71,7 @@ function formatCitationAPA7(r: {
 }
 
 /* ---------- 把大綱字串切成「段落陣列」 ---------- */
-type OutlineSection = { key: string; title: string; text: string };
+type OutlineSection = { key: string; title: string; text: string; label: string };
 
 function parseOutlineToSections(outline: string): OutlineSection[] {
   if (!outline) return [];
@@ -87,10 +86,10 @@ function parseOutlineToSections(outline: string): OutlineSection[] {
   for (const line of lines) {
     if (!line) continue;
     if (isHeader(line)) {
-      const key = line.replace(/[、.].*$/, "").trim(); // 「一」或「1」
+      const keyOnly = line.replace(/[、.].*$/, "").trim(); // 「一」或「1」
       const title = line.replace(/^([一二三四五六七八九十]+、|[0-9]+\.)\s*/, "").trim();
       if (current) sections.push(current);
-      current = { key, title: title || key, text: "" };
+      current = { key: keyOnly || String(sections.length + 1), title: title || keyOnly, text: "", label: line };
     } else if (current) {
       current.text += (current.text ? "\n" : "") + line;
     }
@@ -98,7 +97,7 @@ function parseOutlineToSections(outline: string): OutlineSection[] {
   if (current) sections.push(current);
 
   if (sections.length === 0) {
-    sections.push({ key: "I", title: "大綱", text: outline });
+    sections.push({ key: "I", title: "大綱", text: outline, label: "大綱" });
   }
   return sections.slice(0, 12);
 }
@@ -128,15 +127,14 @@ export default function EasyWorkUI() {
   const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
-  // ----------- Loading -----------
-const [loading, setLoading] = useState<Record<StepName, boolean>>({
-  outline: false,
-  draft: false,
-  feedback: false,
-  rewrite: false,
-  final: false,
-  refs: false, // ← 新增
-});
+  /* ----------- Loading（僅對 StepName） ----------- */
+  const [loading, setLoading] = useState<Record<StepName, boolean>>({
+    outline: false,
+    draft: false,
+    feedback: false,
+    rewrite: false,
+    final: false,
+  });
 
   /* ----------- 點數 ----------- */
   const credits = useCredits();
@@ -150,12 +148,11 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
     feedback: "free",
     rewrite: "free",
     final: "free",
-    refs: "free", 
   });
 
   /* 送 API 前後流程 ---------------------------------------------------- */
   async function callStep(step: StepName, endpoint: string, body: Payload = {}) {
-    const cost = getCost(step, mode[step]);
+    const cost = getCost(step, (mode as any)[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
       return;
@@ -163,7 +160,7 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
 
     setLoading((l) => ({ ...l, [step]: true }));
     try {
-      const payload: Payload = { ...body, mode: mode[step] };
+      const payload: Payload = { ...body, mode: (mode as any)[step] };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -217,6 +214,11 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
       setRefLoading(false);
     }
   }
+
+  const outlineSections = useMemo(
+    () => parseOutlineToSections(results.outline || ""),
+    [results.outline]
+  );
 
   /* ========================== 畫面 ========================== */
   return (
@@ -372,6 +374,7 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
               <TabsContent key={key} value={key}>
                 <Card className="p-4 mt-4 bg-gray-50 relative">
                   <h3 className="font-semibold mb-2">{label}：</h3>
+
                   <Textarea
                     rows={1}
                     className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
@@ -403,15 +406,20 @@ const [loading, setLoading] = useState<Record<StepName, boolean>>({
                     </>
                   )}
 
-                  {/* ← 新增：每段落的參考文獻 Tabs（找候選＋儲存 1–3） */}
-                  {key === "outline" && outlineId && (results.outline?.trim()?.length > 0) && (
+                  {/* ← 每段落的參考文獻 Tabs（候選＋儲存 1–3） */}
+                  {key === "outline" && outlineId && outlineSections.length > 0 && (
                     <SectionReferenceTabs
                       outlineId={outlineId}
-                      outlineText={results.outline}
-                      disabled={refLoading}
-                      onSaved={(saved, remain) => {
-                        setReferences((prev) => [...saved, ...prev]);
-                        if (typeof remain === "number") setCredits(remain);
+                      sections={outlineSections}
+                      onSaved={(saved, remain, spentLocal) => {
+                        if (saved?.length) {
+                          setReferences((prev) => [...saved, ...prev]);
+                        }
+                        if (typeof remain === "number") {
+                          setCredits(remain);
+                        } else if (spentLocal > 0) {
+                          spend(spentLocal);
+                        }
                       }}
                     />
                   )}
@@ -512,27 +520,21 @@ const modeLabel = (m: string) =>
 /* ======================= 每段落參考文獻 Tabs ======================= */
 type SectionReferenceTabsProps = {
   outlineId: string;
-  outlineText: string;
-  onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
-  disabled?: boolean;
+  sections: OutlineSection[];
+  onSaved: (saved: ReferenceItem[], remainingCredits?: number, spentLocal?: number) => void;
 };
 
 function SectionReferenceTabs({
   outlineId,
-  outlineText,
+  sections,
   onSaved,
-  disabled,
 }: SectionReferenceTabsProps) {
-  const [active, setActive] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
   const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({}); // key -> url -> checked
 
-  const sections = parseOutlineToSections(outlineText);
-  if (!sections.length) return null;
-
   async function suggest(sec: OutlineSection) {
-    setLoading(true);
+    setBusyKey(sec.key);
     try {
       const r = await fetch("/api/references/suggest", {
         method: "POST",
@@ -541,7 +543,7 @@ function SectionReferenceTabs({
           outlineId,
           sectionKey: sec.key,
           text: sec.text,
-          source: "web", // 先抓真實文獻，抓不到才 LLM
+          source: "web",
         }),
       }).then((x) => x.json());
 
@@ -559,11 +561,10 @@ function SectionReferenceTabs({
       }));
       setCandidates((prev) => ({ ...prev, [sec.key]: list }));
       setChosen((prev) => ({ ...prev, [sec.key]: {} }));
-      setActive(sec.key);
     } catch (e: any) {
       alert("❌ " + (e.message || "取得候選失敗"));
     } finally {
-      setLoading(false);
+      setBusyKey(null);
     }
   }
 
@@ -576,7 +577,7 @@ function SectionReferenceTabs({
       return;
     }
 
-    setLoading(true);
+    setBusyKey(sec.key);
     try {
       const r = await fetch("/api/references/save", {
         method: "POST",
@@ -584,20 +585,21 @@ function SectionReferenceTabs({
         body: JSON.stringify({
           outlineId,
           items: picked,
-          mode: "web", // 每次扣 1 點，對應 points.ts 的 refs/web
+          mode: "web", // 你的後端可視此為每次 1 點
         }),
       }).then((x) => x.json());
 
       if (r?.error) throw new Error(r.error);
+      onSaved(r.saved || [], r.remainingCredits, r.remainingCredits ? 0 : 1);
 
-      onSaved(r.saved || [], r.remainingCredits);
+      // reset current section selections
       setCandidates((prev) => ({ ...prev, [sec.key]: [] }));
       setChosen((prev) => ({ ...prev, [sec.key]: {} }));
-      alert(`🎉 已加入 ${picked.length} 筆（扣除 ${r.spent ?? 1} 點）`);
+      alert(`🎉 已加入 ${picked.length} 筆${typeof r.spent === "number" ? `（扣 ${r.spent} 點）` : ""}`);
     } catch (e: any) {
       alert("❌ " + (e.message || "儲存失敗"));
     } finally {
-      setLoading(false);
+      setBusyKey(null);
     }
   }
 
@@ -607,42 +609,37 @@ function SectionReferenceTabs({
         為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
 
-  {/* --- 段落 Tabs（非受控）--- */}
-<Tabs defaultValue={active ?? sections[0]?.key ?? ""}>
-  {/* 用外層 div 控制排版，不把 className 放在 TabsList 上 */}
-  <div className="flex flex-wrap">
-    <TabsList>
-      {sections.map((s) => (
-        <TabsTrigger
-          key={s.key}
-          value={s.key}
-          onClick={() => setActive(s.key)} // 記住使用者點到哪一段
-        >
-          {s.label}
-        </TabsTrigger>
-      ))}
-    </TabsList>
-  </div>
+      {/* 非受控 Tabs：不傳 value/onValueChange，避免型別衝突 */}
+      <Tabs defaultValue={sections[0]?.key ?? ""}>
+        {/* 用外層 div 排版，不把 className 放 TabsList 上（與你的 tabs.tsx 型別對齊） */}
+        <div className="flex flex-wrap">
+          <TabsList>
+            {sections.map((s) => (
+              <TabsTrigger key={s.key} value={s.key}>
+                {s.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-  {sections.map((s) => (
-    <TabsContent key={s.key} value={s.key}>
-      {/* 該段落的內容/候選文獻/勾選 UI */}
-      {renderSectionPanel(s)}
-    </TabsContent>
-  ))}
-</Tabs>
-      
+        {sections.map((s) => (
+          <TabsContent key={s.key} value={s.key}>
+            <div className="mt-3">
+              <div className="text-xs text-gray-600 whitespace-pre-wrap mb-2">
+                {s.text || "（此段無內文）"}
+              </div>
+
               <div className="flex gap-2 mb-2">
                 <Button
                   variant="outline"
-                  disabled={disabled || loading}
+                  disabled={!!busyKey}
                   onClick={() => suggest(s)}
                 >
-                  {loading && active === s.key ? "搜尋中…" : "找 3 筆候選"}
+                  {busyKey === s.key ? "搜尋中…" : "找 3 筆候選"}
                 </Button>
                 <Button
                   className="bg-purple-600 text-white"
-                  disabled={disabled || loading || !(candidates[s.key]?.length)}
+                  disabled={!!busyKey || !(candidates[s.key]?.length)}
                   onClick={() => save(s)}
                 >
                   加入已勾選（1–3）
