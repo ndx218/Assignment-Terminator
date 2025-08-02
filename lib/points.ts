@@ -7,8 +7,7 @@ export const MODE_COST: Record<StepName, Record<string, number>> = {
   feedback:{ free: 0, flash: 1 },
   rewrite: { free: 0, pro: 1 },
   final:   { free: 0, undetectable: 2 },
-  // ⬇︎ 每段查找參考文獻只扣 1 點
-  refs:    { web: 1, llm: 1, free: 0 },
+  refs:    { free: 1 },
 };
 
 export function getCost(step: StepName, mode: string) {
