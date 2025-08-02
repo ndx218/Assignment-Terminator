@@ -1,19 +1,17 @@
-/* lib/points.ts */
+// lib/points.ts
+export type StepName = 'outline' | 'draft' | 'feedback' | 'rewrite' | 'final' | 'refs';
 
-/** 各步驟每種模式要花的點數 */
-export const MODE_COST = {
-  outline:  { free: 0, flash: 3 },
-  draft:    { free: 0, pro: 6 },
-  feedback: { free: 0, flash: 3 },
-  rewrite:  { free: 0, pro: 6 },
-  final:    { free: 0, undetectable: 6 },
-} as const;
+export const MODE_COST: Record<StepName, Record<string, number>> = {
+  outline: { free: 0, flash: 1 },
+  draft:   { free: 0, pro: 2 },
+  feedback:{ free: 0, flash: 1 },
+  rewrite: { free: 0, pro: 1 },
+  final:   { free: 0, undetectable: 2 },
+  // ⬇︎ 每段查找參考文獻只扣 1 點
+  refs:    { web: 1, llm: 1, free: 0 },
+};
 
-export type StepName = keyof typeof MODE_COST;
-/** 若之後你要更嚴格，可用：export type ModeName<S extends StepName> = keyof typeof MODE_COST[S]; */
-
-/** 這裡把 union map 強轉成 Record<string, number>，解決「Element implicitly has an 'any' type」的錯誤 */
-export function getCost(step: StepName, mode: string): number {
-  const map = MODE_COST[step] as Record<string, number>;
-  return map[mode] ?? 0;
+export function getCost(step: StepName, mode: string) {
+  const t = MODE_COST[step] || {};
+  return t[mode] ?? 0;
 }
