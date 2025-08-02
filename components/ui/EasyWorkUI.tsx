@@ -607,21 +607,27 @@ function SectionReferenceTabs({
         為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
 
-      <Tabs value={active || (sections[0]?.key ?? "")} onValueChange={setActive}>
-        <TabsList className="flex flex-wrap">
-          {sections.map((s) => (
-            <TabsTrigger key={s.key} value={s.key}>
-              {s.key}．{s.title}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs defaultValue={active ?? (sections[0]?.key ?? "")}>
+  <TabsList className="flex flex-wrap">
+    {sections.map((s) => (
+      <TabsTrigger
+        key={s.key}
+        value={s.key}
+        onClick={() => setActive(s.key)} // ← 記住目前點到的分段
+      >
+        {s.label}
+      </TabsTrigger>
+    ))}
+  </TabsList>
 
-        {sections.map((s) => (
-          <TabsContent key={s.key} value={s.key}>
-            <div className="rounded border p-3 mt-3 bg-white">
-              <div className="text-sm text-gray-700 whitespace-pre-wrap mb-3">
-                {s.text}
-              </div>
+  {sections.map((s) => (
+    <TabsContent key={s.key} value={s.key}>
+      {/* 你的每段內容 / 候選文獻 / 勾選 UI 放這裡 */}
+    </TabsContent>
+  ))}
+</Tabs>
+
+        
 
               <div className="flex gap-2 mb-2">
                 <Button
