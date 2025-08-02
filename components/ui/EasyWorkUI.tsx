@@ -607,28 +607,31 @@ function SectionReferenceTabs({
         為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
 
-      <Tabs defaultValue={active ?? (sections[0]?.key ?? "")}>
-  <TabsList className="flex flex-wrap">
-    {sections.map((s) => (
-      <TabsTrigger
-        key={s.key}
-        value={s.key}
-        onClick={() => setActive(s.key)} // ← 記住目前點到的分段
-      >
-        {s.label}
-      </TabsTrigger>
-    ))}
-  </TabsList>
+  {/* --- 段落 Tabs（非受控）--- */}
+<Tabs defaultValue={active ?? sections[0]?.key ?? ""}>
+  {/* 用外層 div 控制排版，不把 className 放在 TabsList 上 */}
+  <div className="flex flex-wrap">
+    <TabsList>
+      {sections.map((s) => (
+        <TabsTrigger
+          key={s.key}
+          value={s.key}
+          onClick={() => setActive(s.key)} // 記住使用者點到哪一段
+        >
+          {s.label}
+        </TabsTrigger>
+      ))}
+    </TabsList>
+  </div>
 
   {sections.map((s) => (
     <TabsContent key={s.key} value={s.key}>
-      {/* 你的每段內容 / 候選文獻 / 勾選 UI 放這裡 */}
+      {/* 該段落的內容/候選文獻/勾選 UI */}
+      {renderSectionPanel(s)}
     </TabsContent>
   ))}
 </Tabs>
-
-        
-
+      
               <div className="flex gap-2 mb-2">
                 <Button
                   variant="outline"
