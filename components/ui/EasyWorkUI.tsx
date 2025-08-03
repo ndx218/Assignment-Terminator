@@ -509,7 +509,7 @@ const modeLabel = (m: string) =>
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
 
-/* ======================= 每段落參考文獻 Tabs（修正版） ======================= */
+/* ======================= 每段落參考文獻 Tabs（非受控版，符合你的 Tabs 型別） ======================= */
 type SectionReferenceTabsProps = {
   outlineId: string;
   outlineText: string;
@@ -525,8 +525,7 @@ function SectionReferenceTabs({
 }: SectionReferenceTabsProps) {
   const sections = parseOutlineToSections(outlineText);
   const firstKey = sections[0]?.key ?? "";
-  const [active, setActive] = useState<string>(firstKey);
-  const [busyKey, setBusyKey] = useState<string | null>(null); // 哪一個段落正在忙
+  const [busyKey, setBusyKey] = useState<string | null>(null); // 目前哪個段落在 loading
 
   // key(段落) -> 候選清單
   const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
@@ -565,7 +564,6 @@ function SectionReferenceTabs({
 
       setCandidates((prev) => ({ ...prev, [sec.key]: list }));
       setChosen((prev) => ({ ...prev, [sec.key]: {} }));
-      setActive(sec.key);
     } catch (e: any) {
       alert("❌ " + (e.message || "取得候選失敗"));
     } finally {
@@ -613,9 +611,8 @@ function SectionReferenceTabs({
         為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
       </div>
 
-      {/* 受控 Tabs（shadcn 正確用法） */}
-      <Tabs value={active} onValueChange={setActive}>
-        {/* 用外層 div 控制排版；不把 className 放在 TabsList 上，避免型別衝突 */}
+      {/* 非受控 Tabs：只給 defaultValue */}
+      <Tabs defaultValue={firstKey}>
         <div className="flex flex-wrap">
           <TabsList>
             {sections.map((s) => (
