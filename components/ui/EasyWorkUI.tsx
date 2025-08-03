@@ -9,6 +9,16 @@ import Textarea from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
+/* 新增：Dialog */
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
 
@@ -44,6 +54,7 @@ export type ReferenceItem = {
   publishedAt?: string | Date | null;
   type?: string | null;
   credibility?: number | null;
+  summary?: string | null;
 };
 
 /* ---------- APA7 簡化格式（底部顯示/匯出用） ---------- */
@@ -128,13 +139,14 @@ export default function EasyWorkUI() {
   const [references, setReferences] = useState<ReferenceItem[]>([]);
   const [refLoading, setRefLoading] = useState(false);
 
-  /* ----------- Loading（支援 refs） ----------- */
-  const [loading, setLoading] = useState<Record<StepName | "refs", boolean>>({
+  /* ----------- Loading（含 refs） ----------- */
+  const [loading, setLoading] = useState<Record<StepName, boolean>>({
     outline: false,
     draft: false,
     feedback: false,
     rewrite: false,
     final: false,
+    // @ts-expect-error: 某些專案 StepName 已含 refs，這裡保守加入以免型別差異
     refs: false,
   });
 
@@ -143,7 +155,7 @@ export default function EasyWorkUI() {
   const spend = useSpend();
   const setCredits = useSetCredits();
 
-  /* ----------- 模式（支援 refs） ----------- */
+  /* ----------- 模式（含 refs） ----------- */
   const [mode, setMode] = useState<ModeState>({
     outline: "free",
     draft: "free",
@@ -153,9 +165,12 @@ export default function EasyWorkUI() {
     refs: "free",
   });
 
+  /* 大綱分頁：編輯 / 檢視 切換 */
+  const [outlineViewMode, setOutlineViewMode] = useState<"edit" | "view">("edit");
+
   /* 送 API 前後流程 ---------------------------------------------------- */
   async function callStep(step: StepName, endpoint: string, body: Payload = {}) {
-    const cost = getCost(step, mode[step]);
+    const cost = getCost(step, (mode as any)[step]);
     if (cost > 0 && credits < cost) {
       alert("點數不足，請先充值或切回免費模式");
       return;
@@ -163,7 +178,7 @@ export default function EasyWorkUI() {
 
     setLoading((l) => ({ ...l, [step]: true }));
     try {
-      const payload: Payload = { ...body, mode: mode[step] };
+      const payload: Payload = { ...body, mode: (mode as any)[step] };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -372,15 +387,61 @@ export default function EasyWorkUI() {
               <TabsContent key={key} value={key}>
                 <Card className="p-4 mt-4 bg-gray-50 relative">
                   <h3 className="font-semibold mb-2">{label}：</h3>
-                  <Textarea
-                    rows={1}
-                    className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
-                    value={results[key] || ""}
-                    onChange={(e) =>
-                      setResults((r) => ({ ...r, [key]: e.target.value }))
-                    }
-                  />
 
+                  {/* --- 大綱頁：可切換「編輯 / 檢視＋參考文獻」 --- */}
+                  {key === "outline" ? (
+                    <>
+                      <div className="mb-2 flex items-center gap-2">
+                        <Button
+                          variant={outlineViewMode === "edit" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOutlineViewMode("edit")}
+                        >
+                          ✏️ 編輯模式
+                        </Button>
+                        <Button
+                          variant={outlineViewMode === "view" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOutlineViewMode("view")}
+                          disabled={!outlineId || !(results.outline?.trim())}
+                        >
+                          👁️ 檢視＋參考文獻
+                        </Button>
+                      </div>
+
+                      {outlineViewMode === "edit" ? (
+                        <Textarea
+                          rows={1}
+                          className="whitespace-pre-wrap mb-2 w-full !h-[60vh] overflow-auto resize-none"
+                          value={results[key] || ""}
+                          onChange={(e) =>
+                            setResults((r) => ({ ...r, [key]: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        <OutlineViewerWithRefs
+                          outlineId={outlineId!}
+                          outlineText={results.outline || ""}
+                          disabled={refLoading}
+                          onSaved={(saved, remain) => {
+                            setReferences((prev) => [...saved, ...prev]);
+                            if (typeof remain === "number") setCredits(remain);
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <Textarea
+                      rows={1}
+                      className="whitespace-pre-wrap mb-2 w-full !h-[75vh] overflow-auto resize-none"
+                      value={results[key] || ""}
+                      onChange={(e) =>
+                        setResults((r) => ({ ...r, [key]: e.target.value }))
+                      }
+                    />
+                  )}
+
+                  {/* 複製按鈕（非空時顯示；編輯/檢視皆可用） */}
                   {results[key] && (
                     <>
                       <Button
@@ -401,19 +462,6 @@ export default function EasyWorkUI() {
                         </span>
                       )}
                     </>
-                  )}
-
-                  {/* 每段落參考文獻 Tabs（找候選＋儲存 1–3） */}
-                  {key === "outline" && outlineId && (results.outline?.trim()?.length > 0) && (
-                    <SectionReferenceTabs
-                      outlineId={outlineId}
-                      outlineText={results.outline}
-                      disabled={refLoading}
-                      onSaved={(saved, remain) => {
-                        setReferences((prev) => [...saved, ...prev]);
-                        if (typeof remain === "number") setCredits(remain);
-                      }}
-                    />
                   )}
 
                   {/* 底部「參考文獻」總表（APA7 顯示／匯出） */}
@@ -509,49 +557,96 @@ const modeLabel = (m: string) =>
     undetectable: "Undetectable",
   } as Record<string, string>)[m] ?? m;
 
-/* ======================= 每段落參考文獻 Tabs（非受控版，符合你的 Tabs 型別） ======================= */
-type SectionReferenceTabsProps = {
-  outlineId: string;
-  outlineText: string;
-  onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
-  disabled?: boolean;
-};
-
-function SectionReferenceTabs({
+/* ======================= 逐條目檢視 + 參考按鈕 ======================= */
+/** 逐段（I/II/III…），每段再以行切子彈（- 或 • 開頭；沒有就整段當一條） */
+function OutlineViewerWithRefs({
   outlineId,
   outlineText,
-  onSaved,
   disabled,
-}: SectionReferenceTabsProps) {
+  onSaved,
+}: {
+  outlineId: string;
+  outlineText: string;
+  disabled?: boolean;
+  onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
+}) {
   const sections = parseOutlineToSections(outlineText);
-  const firstKey = sections[0]?.key ?? "";
-  const [busyKey, setBusyKey] = useState<string | null>(null); // 目前哪個段落在 loading
-
-  // key(段落) -> 候選清單
-  const [candidates, setCandidates] = useState<Record<string, ReferenceItem[]>>({});
-  // key(段落) -> url -> checked
-  const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({});
-
   if (!sections.length) return null;
 
-  async function suggest(sec: OutlineSection) {
-    setBusyKey(sec.key);
+  const bulletsOf = (text: string): string[] => {
+    const lines = (text || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const bullets = lines
+      .filter((l) => /^[-•]/.test(l))
+      .map((l) => l.replace(/^[-•]\s*/, ""));
+    return bullets.length ? bullets : [text.trim()];
+  };
+
+  return (
+    <div className="mt-2 border rounded p-3 bg-white">
+      {sections.map((sec) => (
+        <div key={sec.key} className="mb-4">
+          <div className="font-semibold mb-1">
+            {sec.key}. {sec.title}
+          </div>
+          <ul className="space-y-1">
+            {bulletsOf(sec.text).map((b, i) => (
+              <li key={`${sec.key}-${i}`} className="flex items-start gap-2">
+                <span className="flex-1 break-all">- {b}</span>
+                <ReferenceDialog
+                  outlineId={outlineId}
+                  sectionKey={sec.key}
+                  bulletText={b}
+                  disabled={disabled}
+                  onSaved={onSaved}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ======================= 參考文獻 Dialog ======================= */
+function ReferenceDialog({
+  outlineId,
+  sectionKey,
+  bulletText,
+  disabled,
+  onSaved,
+}: {
+  outlineId: string;
+  sectionKey: string;
+  bulletText: string;
+  disabled?: boolean;
+  onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [cands, setCands] = useState<ReferenceItem[]>([]);
+  const [picked, setPicked] = useState<Record<string, boolean>>({}); // url -> checked
+  const pickedCount = Object.values(picked).filter(Boolean).length;
+
+  async function suggest() {
+    setBusy(true);
     try {
       const r = await fetch("/api/references/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           outlineId,
-          sectionKey: sec.key,
-          text: sec.text,
+          sectionKey,
+          text: bulletText,
           source: "web",
         }),
       }).then((x) => x.json());
-
       if (r?.error) throw new Error(r.error);
-
       const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
-        sectionKey: sec.key,
+        sectionKey,
         title: it.title,
         url: it.url,
         doi: it.doi ?? null,
@@ -560,161 +655,122 @@ function SectionReferenceTabs({
         publishedAt: it.publishedAt ?? null,
         type: it.type ?? "OTHER",
         credibility: it.credibility ?? null,
+        summary: it.summary ?? null,
       }));
-
-      setCandidates((prev) => ({ ...prev, [sec.key]: list }));
-      setChosen((prev) => ({ ...prev, [sec.key]: {} }));
+      setCands(list);
+      setPicked({});
     } catch (e: any) {
       alert("❌ " + (e.message || "取得候選失敗"));
     } finally {
-      setBusyKey(null);
+      setBusy(false);
     }
   }
 
-  async function save(sec: OutlineSection) {
-    const picked = (candidates[sec.key] || []).filter(
-      (c) => chosen[sec.key]?.[c.url]
-    );
-    if (picked.length === 0 || picked.length > 3) {
-      alert("請勾選 1~3 筆參考文獻");
+  async function save() {
+    const items = cands.filter((c) => picked[c.url]);
+    if (items.length === 0 || items.length > 3) {
+      alert("請勾選 1–3 筆參考文獻");
       return;
     }
-
-    setBusyKey(sec.key);
+    setBusy(true);
     try {
       const r = await fetch("/api/references/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlineId,
-          items: picked,
-          mode: "web", // 每次扣 1 點
-        }),
+        body: JSON.stringify({ outlineId, items, mode: "web" }),
       }).then((x) => x.json());
-
       if (r?.error) throw new Error(r.error);
-
       onSaved(r.saved || [], r.remainingCredits);
-      setCandidates((prev) => ({ ...prev, [sec.key]: [] }));
-      setChosen((prev) => ({ ...prev, [sec.key]: {} }));
-      alert(`🎉 已加入 ${picked.length} 筆（扣除 ${r.spent ?? 1} 點）`);
+      setOpen(false);
+      alert(`🎉 已加入 ${items.length} 筆（扣除 ${r.spent ?? 1} 點）`);
     } catch (e: any) {
       alert("❌ " + (e.message || "儲存失敗"));
     } finally {
-      setBusyKey(null);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="mt-4 border-t pt-3">
-      <div className="mb-2 text-sm text-gray-600">
-        為每個段落挑選參考文獻（每次 1 點，可選 1–3 筆）
-      </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="xs" disabled={disabled}>
+          參考文獻
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>為此條目找參考文獻</DialogTitle>
+        </DialogHeader>
 
-      {/* 非受控 Tabs：只給 defaultValue */}
-      <Tabs defaultValue={firstKey}>
-        <div className="flex flex-wrap">
-          <TabsList>
-            {sections.map((s) => (
-              <TabsTrigger key={s.key} value={s.key}>
-                {s.title || s.key}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <div className="text-sm mb-2">
+          <div className="font-medium">[{sectionKey}] {bulletText}</div>
         </div>
 
-        {sections.map((s) => (
-          <TabsContent key={s.key} value={s.key}>
-            <div className="mt-3">
-              <div className="text-sm text-gray-700 mb-2">
-                <span className="font-medium">{s.title}</span>
-                {s.text ? (
-                  <span className="text-gray-500">
-                    {" "}
-                    · {s.text.slice(0, 60)}
-                    {s.text.length > 60 ? "…" : ""}
-                  </span>
-                ) : null}
-              </div>
+        <div className="flex gap-2 mb-2">
+          <Button variant="outline" onClick={suggest} disabled={busy}>
+            {busy ? "搜尋中…" : "找 3 筆候選"}
+          </Button>
+          <Button onClick={save} disabled={busy || pickedCount === 0 || pickedCount > 3}>
+            加入已勾選（{pickedCount}）
+          </Button>
+        </div>
 
-              <div className="flex gap-2 mb-2">
-                <Button
-                  variant="outline"
-                  disabled={disabled || busyKey === s.key}
-                  onClick={() => suggest(s)}
-                >
-                  {busyKey === s.key ? "搜尋中…" : "找 3 筆候選"}
-                </Button>
-                <Button
-                  className="bg-purple-600 text-white"
-                  disabled={
-                    disabled ||
-                    busyKey === s.key ||
-                    !(candidates[s.key]?.length)
-                  }
-                  onClick={() => save(s)}
-                >
-                  加入已勾選（1–3）
-                </Button>
-              </div>
+        {cands.length === 0 ? (
+          <p className="text-sm text-gray-500">尚未有候選。請先「找 3 筆候選」。</p>
+        ) : (
+          <ul className="space-y-3 text-sm max-h-80 overflow-auto pr-2">
+            {cands.map((c) => {
+              const checked = !!picked[c.url];
+              const disable =
+                !checked && Object.values(picked).filter(Boolean).length >= 3;
+              return (
+                <li key={c.url} className="border rounded p-2">
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disable}
+                      onChange={(e) =>
+                        setPicked((prev) => ({ ...prev, [c.url]: e.target.checked }))
+                      }
+                    />
+                    <span className="break-all">
+                      <b>{c.title}</b>
+                      {c.authors ? ` · ${c.authors}` : ""} {c.source ? ` · ${c.source}` : ""}
+                      {c.doi ? ` · DOI: ${c.doi}` : ""}
+                      {typeof c.credibility === "number" ? (
+                        <span className="ml-2 text-xs text-gray-500">
+                          可信度 {c.credibility}/100
+                        </span>
+                      ) : null}
+                      {c.summary ? (
+                        <div className="mt-1 text-xs text-gray-600">摘要：{c.summary}</div>
+                      ) : null}
+                      <div>
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 underline"
+                        >
+                          連結
+                        </a>
+                      </div>
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
-              {(candidates[s.key] || []).length === 0 ? (
-                <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
-              ) : (
-                <ul className="space-y-2">
-                  {candidates[s.key].map((c) => {
-                    const checked = !!chosen[s.key]?.[c.url];
-                    const count = Object.values(chosen[s.key] || {}).filter(Boolean).length;
-                    const disableCheck = !checked && count >= 3;
-                    return (
-                      <li key={c.url} className="text-sm">
-                        <label className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disableCheck}
-                            onChange={(e) =>
-                              setChosen((prev) => ({
-                                ...prev,
-                                [s.key]: {
-                                  ...(prev[s.key] || {}),
-                                  [c.url]: e.target.checked,
-                                },
-                              }))
-                            }
-                          />
-                          <span className="break-all">
-                            <b>{c.title}</b>
-                            {c.authors ? ` · ${c.authors}` : ""}{" "}
-                            {c.source ? ` · ${c.source}` : ""}{" "}
-                            {c.doi ? ` · DOI: ${c.doi}` : ""}
-                            {typeof c.credibility === "number" ? (
-                              <span className="ml-2 text-xs text-gray-500">
-                                可信度 {c.credibility}/100
-                              </span>
-                            ) : null}
-                            <div>
-                              <a
-                                href={c.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-blue-600 underline"
-                              >
-                                連結
-                              </a>
-                            </div>
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>
+            關閉
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -744,11 +800,7 @@ function ReferencesPanel({
           <Button variant="outline" disabled={loading} onClick={() => onRefresh()}>
             重新整理
           </Button>
-          <Button
-            className="bg-purple-600 text-white"
-            disabled={loading}
-            onClick={() => onGenerate()}
-          >
+          <Button className="bg-purple-600 text-white" disabled={loading} onClick={() => onGenerate()}>
             {loading ? "產生中…" : "產生參考文獻"}
           </Button>
           <Button variant="outline" onClick={onExport}>
@@ -772,9 +824,7 @@ function ReferencesPanel({
                 link
               </a>
               {typeof r.credibility === "number" ? (
-                <span className="ml-2 text-xs text-gray-500">
-                  可信度 {r.credibility}/100
-                </span>
+                <span className="ml-2 text-xs text-gray-500">可信度 {r.credibility}/100</span>
               ) : null}
             </li>
           ))}
