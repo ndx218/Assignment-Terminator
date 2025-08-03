@@ -600,102 +600,6 @@ function OutlineViewerWithRefs({
   );
 }
 /* ======================= 參考文獻「內嵌面板」樣式 ======================= */
-function ReferenceInlinePanel({
-  label = "參考文獻",
-  disabled = false,
-  busy = false,
-  onSuggest,
-  onSave,
-  candidates = [],
-  chosen = {},
-  onToggleCheck,
-}: {
-  label?: string;
-  disabled?: boolean;
-  busy?: boolean;
-  onSuggest: () => void;
-  onSave: () => void;
-  candidates: ReferenceItem[];
-  chosen: Record<string, boolean>; // url -> checked
-  onToggleCheck: (url: string, checked: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-<Button
-  variant="outline"
-  size="sm"
-  className="h-7 px-2 text-xs"   // ← 模擬 xs：較矮、較小字
-  disabled={disabled}
-  onClick={() => setOpen((v) => !v)}
->
-  {open ? "隱藏參考文獻" : label}
-</Button>
-
-      {open && (
-        <div className="mt-3 rounded border bg-white p-3 space-y-2">
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={disabled || busy} onClick={onSuggest}>
-              {busy ? "搜尋中…" : "找 3 筆候選"}
-            </Button>
-            <Button
-              className="bg-purple-600 text-white"
-              disabled={disabled || busy || !candidates.length}
-              onClick={onSave}
-            >
-              加入已勾選（1–3）
-            </Button>
-          </div>
-
-          {!candidates.length ? (
-            <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
-          ) : (
-            <ul className="space-y-2">
-              {candidates.map((c) => {
-                const checked = !!chosen[c.url];
-                const count = Object.values(chosen).filter(Boolean).length;
-                const disableCheck = !checked && count >= 3;
-                return (
-                  <li key={c.url} className="text-sm">
-                    <label className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={disableCheck}
-                        onChange={(e) => onToggleCheck(c.url, e.target.checked)}
-                      />
-                      <span className="break-all">
-                        <b>{c.title}</b>
-                        {c.authors ? ` · ${c.authors}` : ""}{" "}
-                        {c.source ? ` · ${c.source}` : ""}{" "}
-                        {c.doi ? ` · DOI: ${c.doi}` : ""}
-                        {typeof c.credibility === "number" ? (
-                          <span className="ml-2 text-xs text-gray-500">
-                            可信度 {c.credibility}/100
-                          </span>
-                        ) : null}
-                        <div>
-                          <a
-                            href={c.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 underline"
-                          >
-                            連結
-                          </a>
-                        </div>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ======================= 參考文獻「行內面板」的封裝：ReferenceDialog ======================= */
 function ReferenceDialog({
   outlineId,
@@ -720,15 +624,9 @@ function ReferenceDialog({
       const r = await fetch("/api/references/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlineId,
-          sectionKey,
-          text: bulletText,
-          source: "web",
-        }),
+        body: JSON.stringify({ outlineId, sectionKey, text: bulletText, source: "web" }),
       }).then((x) => x.json());
       if (r?.error) throw new Error(r.error);
-
       const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
         sectionKey,
         title: it.title,
@@ -782,14 +680,12 @@ function ReferenceDialog({
       onSave={save}
       candidates={cands}
       chosen={picked}
-      onToggleCheck={(url, checked) =>
-        setPicked((prev) => ({ ...prev, [url]: checked }))
-      }
+      onToggleCheck={(url, checked) => setPicked((prev) => ({ ...prev, [url]: checked }))}
     />
   );
 }
 
-      /* 小元件：按一下顯示「參考文獻選擇」面板（不使用 Dialog） */
+/* ======================= 參考文獻「內嵌面板」樣式（唯一保留版本） ======================= */
 function ReferenceInlinePanel({
   label = "參考文獻",
   disabled = false,
@@ -815,8 +711,8 @@ function ReferenceInlinePanel({
     <div className="mt-2">
       <Button
         variant="outline"
-        size="sm"               // ← 改 sm
-        className="h-7 px-2 text-xs"  // ← 用樣式模擬 xs
+        size="sm"                 // shadcn 允許的 size
+        className="h-7 px-2 text-xs"  // 視覺縮小
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
@@ -861,17 +757,10 @@ function ReferenceInlinePanel({
                         {c.source ? ` · ${c.source}` : ""}{" "}
                         {c.doi ? ` · DOI: ${c.doi}` : ""}
                         {typeof c.credibility === "number" ? (
-                          <span className="ml-2 text-xs text-gray-500">
-                            可信度 {c.credibility}/100
-                          </span>
+                          <span className="ml-2 text-xs text-gray-500">可信度 {c.credibility}/100</span>
                         ) : null}
                         <div>
-                          <a
-                            href={c.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 underline"
-                          >
+                          <a href={c.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
                             連結
                           </a>
                         </div>
