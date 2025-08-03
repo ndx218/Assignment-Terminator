@@ -12,6 +12,13 @@ import { ReferencesPanel } from "@/components/ui/ReferencesPanel";
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
 
+import {
+  Dialog, DialogTrigger, DialogContent,
+  DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter
+} from "@/components/ui/dialog";
+
+
 /* ---------------- 常量 ---------------- */
 const steps: Array<{ key: StepName; label: string }> = [
   { key: "outline", label: "📑 大綱產生器" },
