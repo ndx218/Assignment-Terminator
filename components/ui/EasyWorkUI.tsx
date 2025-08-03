@@ -599,8 +599,105 @@ function OutlineViewerWithRefs({
     </div>
   );
 }
+/* ======================= 參考文獻「內嵌面板」樣式 ======================= */
+function ReferenceInlinePanel({
+  label = "參考文獻",
+  disabled = false,
+  busy = false,
+  onSuggest,
+  onSave,
+  candidates = [],
+  chosen = {},
+  onToggleCheck,
+}: {
+  label?: string;
+  disabled?: boolean;
+  busy?: boolean;
+  onSuggest: () => void;
+  onSave: () => void;
+  candidates: ReferenceItem[];
+  chosen: Record<string, boolean>; // url -> checked
+  onToggleCheck: (url: string, checked: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
 
-/* ======================= 參考文獻 Dialog ======================= */
+  return (
+    <div className="mt-2">
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "隱藏參考文獻" : label}
+      </Button>
+
+      {open && (
+        <div className="mt-3 rounded border bg-white p-3 space-y-2">
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={disabled || busy} onClick={onSuggest}>
+              {busy ? "搜尋中…" : "找 3 筆候選"}
+            </Button>
+            <Button
+              className="bg-purple-600 text-white"
+              disabled={disabled || busy || !candidates.length}
+              onClick={onSave}
+            >
+              加入已勾選（1–3）
+            </Button>
+          </div>
+
+          {!candidates.length ? (
+            <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
+          ) : (
+            <ul className="space-y-2">
+              {candidates.map((c) => {
+                const checked = !!chosen[c.url];
+                const count = Object.values(chosen).filter(Boolean).length;
+                const disableCheck = !checked && count >= 3;
+                return (
+                  <li key={c.url} className="text-sm">
+                    <label className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disableCheck}
+                        onChange={(e) => onToggleCheck(c.url, e.target.checked)}
+                      />
+                      <span className="break-all">
+                        <b>{c.title}</b>
+                        {c.authors ? ` · ${c.authors}` : ""}{" "}
+                        {c.source ? ` · ${c.source}` : ""}{" "}
+                        {c.doi ? ` · DOI: ${c.doi}` : ""}
+                        {typeof c.credibility === "number" ? (
+                          <span className="ml-2 text-xs text-gray-500">
+                            可信度 {c.credibility}/100
+                          </span>
+                        ) : null}
+                        <div>
+                          <a
+                            href={c.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 underline"
+                          >
+                            連結
+                          </a>
+                        </div>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ======================= 參考文獻「容器」元件（呼叫 suggest/save） ======================= */
 function ReferenceDialog({
   outlineId,
   sectionKey,
@@ -614,11 +711,9 @@ function ReferenceDialog({
   disabled?: boolean;
   onSaved: (saved: ReferenceItem[], remainingCredits?: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cands, setCands] = useState<ReferenceItem[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({}); // url -> checked
-  const pickedCount = Object.values(picked).filter(Boolean).length;
 
   async function suggest() {
     setBusy(true);
@@ -670,7 +765,6 @@ function ReferenceDialog({
       }).then((x) => x.json());
       if (r?.error) throw new Error(r.error);
       onSaved(r.saved || [], r.remainingCredits);
-      setOpen(false);
       alert(`🎉 已加入 ${items.length} 筆（扣除 ${r.spent ?? 1} 點）`);
     } catch (e: any) {
       alert("❌ " + (e.message || "儲存失敗"));
@@ -678,94 +772,23 @@ function ReferenceDialog({
       setBusy(false);
     }
   }
-/* 小元件：按一下顯示「參考文獻選擇」面板（不使用 Dialog） */
-function ReferenceInlinePanel({
-  label = "參考文獻",
-  disabled = false,
-  busy = false,
-  onSuggest,
-  onSave,
-  candidates = [],
-  chosen = {},
-  onToggleCheck,
-}: {
-  label?: string;
-  disabled?: boolean;
-  busy?: boolean;
-  onSuggest: () => void;
-  onSave: () => void;
-  candidates: ReferenceItem[];
-  chosen: Record<string, boolean>;     // url -> checked
-  onToggleCheck: (url: string, checked: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
 
   return (
-    <div className="mt-2">
-      <Button
-        variant="outline"
-        size="xs"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {open ? "隱藏參考文獻" : label}
-      </Button>
-
-      {open && (
-        <div className="mt-3 rounded border bg-white p-3 space-y-2">
-          <div className="flex gap-2">
-            <Button variant="outline" disabled={disabled || busy} onClick={onSuggest}>
-              {busy ? "搜尋中…" : "找 3 筆候選"}
-            </Button>
-            <Button className="bg-purple-600 text-white" disabled={disabled || busy || !candidates.length} onClick={onSave}>
-              加入已勾選（1–3）
-            </Button>
-          </div>
-
-          {!candidates.length ? (
-            <p className="text-sm text-gray-400">尚未搜尋候選文獻。</p>
-          ) : (
-            <ul className="space-y-2">
-              {candidates.map((c) => {
-                const checked = !!chosen[c.url];
-                const count = Object.values(chosen).filter(Boolean).length;
-                const disableCheck = !checked && count >= 3;
-                return (
-                  <li key={c.url} className="text-sm">
-                    <label className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={disableCheck}
-                        onChange={(e) => onToggleCheck(c.url, e.target.checked)}
-                      />
-                      <span className="break-all">
-                        <b>{c.title}</b>
-                        {c.authors ? ` · ${c.authors}` : ""}{" "}
-                        {c.source ? ` · ${c.source}` : ""}{" "}
-                        {c.doi ? ` · DOI: ${c.doi}` : ""}
-                        {typeof c.credibility === "number" ? (
-                          <span className="ml-2 text-xs text-gray-500">可信度 {c.credibility}/100</span>
-                        ) : null}
-                        <div>
-                          <a href={c.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-                            連結
-                          </a>
-                        </div>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
+    <ReferenceInlinePanel
+      disabled={disabled}
+      busy={busy}
+      onSuggest={suggest}
+      onSave={save}
+      candidates={cands}
+      chosen={picked}
+      onToggleCheck={(url, checked) =>
+        setPicked((p) => ({ ...p, [url]: checked }))
+      }
+    />
   );
 }
 
-/* ======================= 小工具：存文字成檔案 ======================= */
+/* ======================= 小工具：存文字成檔案（頂層宣告，外部可呼叫） ======================= */
 function downloadTextFile(filename: string, text: string) {
   if (typeof window === "undefined") return;
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
