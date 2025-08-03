@@ -631,14 +631,29 @@ function ReferenceDialog({
   const [picked, setPicked] = useState<Record<string, boolean>>({}); // url -> checked
 
   async function suggest() {
+    console.log("📦 API 參數確認", { outlineId, sectionKey, text: bulletText });
+
+    // ✅ 防呆：避免空參數導致 400 錯誤
+    if (!outlineId || !sectionKey || !bulletText?.trim()) {
+      alert("⚠️ 缺少必要資料，請先產生大綱再試一次");
+      return;
+    }
+
     setBusy(true);
     try {
       const r = await fetch("/api/references/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outlineId, sectionKey, text: bulletText, source: "web" }),
-      }).then((x) => x.json());
+        body: JSON.stringify({
+          outlineId,
+          sectionKey,
+          text: bulletText,
+          source: "web",
+        }),
+      }).then((res) => res.json());
+
       if (r?.error) throw new Error(r.error);
+
       const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
         sectionKey,
         title: it.title,
@@ -651,10 +666,11 @@ function ReferenceDialog({
         credibility: it.credibility ?? null,
         summary: it.summary ?? null,
       }));
+
       setCands(list);
       setPicked({});
     } catch (e: any) {
-      alert("❌ " + (e.message || "取得候選失敗"));
+      alert("❌ 無法取得參考文獻候選：" + (e.message || "未知錯誤"));
     } finally {
       setBusy(false);
     }
@@ -662,22 +678,30 @@ function ReferenceDialog({
 
   async function save() {
     const items = cands.filter((c) => picked[c.url]);
+
     if (items.length === 0 || items.length > 3) {
       alert("請勾選 1–3 筆參考文獻");
       return;
     }
+
     setBusy(true);
     try {
       const r = await fetch("/api/references/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outlineId, items, mode: "web" }),
-      }).then((x) => x.json());
+        body: JSON.stringify({
+          outlineId,
+          items,
+          mode: "web",
+        }),
+      }).then((res) => res.json());
+
       if (r?.error) throw new Error(r.error);
+
       onSaved(r.saved || [], r.remainingCredits);
-      alert(`🎉 已加入 ${items.length} 筆（扣除 ${r.spent ?? 1} 點）`);
+      alert(`🎉 已成功加入 ${items.length} 筆文獻（扣除 ${r.spent ?? 1} 點）`);
     } catch (e: any) {
-      alert("❌ " + (e.message || "儲存失敗"));
+      alert("❌ 儲存失敗：" + (e.message || "未知錯誤"));
     } finally {
       setBusy(false);
     }
