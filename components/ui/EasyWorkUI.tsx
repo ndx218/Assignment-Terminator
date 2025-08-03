@@ -9,14 +9,6 @@ import Textarea from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-/* 新增：Dialog */
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
