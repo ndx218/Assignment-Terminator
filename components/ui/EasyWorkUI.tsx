@@ -55,14 +55,14 @@ export type ReferenceItem = {
 };
 
 /* ---------- APA7 簡化格式（底部顯示/匯出用） ---------- */
-function formatCitationAPA7(r: {
+export function formatCitationAPA7(r: {
   authors?: string | null;
   publishedAt?: string | Date | null;
   title?: string;
   source?: string | null;
   doi?: string | null;
   url?: string | null;
-}) {
+}) { /* ... */ }
   const year = r.publishedAt
     ? (typeof r.publishedAt === "string"
         ? r.publishedAt.slice(0, 4)
@@ -784,7 +784,8 @@ function ReferenceInlinePanel({
   );
 }
 
-      
+
+
 /* ======================= 小工具：存文字成檔案（頂層宣告，外部可呼叫） ======================= */
 function downloadTextFile(filename: string, text: string) {
   if (typeof window === "undefined") return;
