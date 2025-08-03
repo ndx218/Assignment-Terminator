@@ -55,19 +55,22 @@ export type ReferenceItem = {
 };
 
 /* ---------- APA7 簡化格式（底部顯示/匯出用） ---------- */
-export function formatCitationAPA7(r: {
+type Citation = {
   authors?: string | null;
   publishedAt?: string | Date | null;
   title?: string;
   source?: string | null;
   doi?: string | null;
   url?: string | null;
-}) { /* ... */ }
+};
+
+export function formatCitationAPA7(r: Citation) {
   const year = r.publishedAt
     ? (typeof r.publishedAt === "string"
-        ? r.publishedAt.slice(0, 4)
-        : String((r.publishedAt as Date).getFullYear()))
-    : "n.d.";
+        ? r.publishedAt.slice(0, 4) // 第66行
+        : String((r.publishedAt as Date).getFullYear())) // 第67行
+    : "n.d.";  // 如果 `publishedAt` 沒有提供，就顯示 "n.d."
+  
   const authors = r.authors ? r.authors + ". " : "";
   const title = r.title ? `${r.title}.` : "";
   const source = r.source ? ` ${r.source}.` : "";
@@ -76,8 +79,10 @@ export function formatCitationAPA7(r: {
     : r.url
     ? ` ${r.url}`
     : "";
+  
   return `${authors}(${year}). ${title}${source}${tail}`.replace(/\s+/g, " ").trim();
 }
+
 
 /* ---------- 把大綱字串切成「段落陣列」 ---------- */
 type OutlineSection = { key: string; title: string; text: string };
