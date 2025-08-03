@@ -621,16 +621,15 @@ function ReferenceInlinePanel({
 }) {
   const [open, setOpen] = useState(false);
 
-  return (
-    <div className="mt-2">
-      <Button
-        variant="outline"
-        size="xs"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {open ? "隱藏參考文獻" : label}
-      </Button>
+<Button
+  variant="outline"
+  size="sm"
+  className="h-7 px-2 text-xs"   // ← 模擬 xs：較矮、較小字
+  disabled={disabled}
+  onClick={() => setOpen((v) => !v)}
+>
+  {open ? "隱藏參考文獻" : label}
+</Button>
 
       {open && (
         <div className="mt-3 rounded border bg-white p-3 space-y-2">
