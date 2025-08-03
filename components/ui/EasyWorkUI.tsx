@@ -17,7 +17,6 @@ import {
   DialogTitle,
   DialogFooter,
   DialogTrigger,
-} from "@/components/ui/dialog";
 
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
