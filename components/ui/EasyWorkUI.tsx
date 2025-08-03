@@ -137,7 +137,6 @@ export default function EasyWorkUI() {
     feedback: false,
     rewrite: false,
     final: false,
-    // @ts-expect-error: 某些專案 StepName 已含 refs，這裡保守加入以免型別差異
     refs: false,
   });
 
