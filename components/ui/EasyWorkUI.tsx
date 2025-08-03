@@ -765,13 +765,17 @@ function ReferenceInlinePanel({
   );
 }
 
-/* ======================= 小工具 ======================= */
+/* ======================= 小工具：存文字成檔案 ======================= */
 function downloadTextFile(filename: string, text: string) {
+  if (typeof window === "undefined") return;
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
