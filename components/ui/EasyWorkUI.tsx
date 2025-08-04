@@ -198,6 +198,7 @@ export default function EasyWorkUI() {
         "";
 
       if (step === "outline" && data.outlineId) {
+        console.log("✅ outlineId 設定成功", data.outlineId); 
         setOutlineId(data.outlineId);
         setReferences([]);
       }
