@@ -394,25 +394,29 @@ export default function EasyWorkUI() {
                   {key === "outline" ? (
                     <>
                       <div className="mb-2 flex items-center gap-2">
-                        <Button
-                          variant={outlineViewMode === "edit" ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setOutlineViewMode("edit")}
-                        >
-                          ✏️ 編輯模式
+                        
                        <Button
-                          variant={outlineViewMode === "view" ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            if (!outlineId || !(results.outline?.trim())) {
-                              alert("⚠️ 系統仍在載入大綱資料，請稍候再進入參考文獻檢視模式");
-                              return;
-                            }
-                            setOutlineViewMode("view");
-                          }}
-                        >
-                          👁️ 檢視＋參考文獻
-                        </Button>
+  variant={outlineViewMode === "edit" ? "default" : "outline"}
+  size="sm"
+  onClick={() => setOutlineViewMode("edit")}
+>
+  ✏️ 編輯模式
+</Button>
+
+<Button
+  variant={outlineViewMode === "view" ? "default" : "outline"}
+  size="sm"
+  onClick={() => {
+    if (!outlineId || !(results.outline?.trim())) {
+      alert("⚠️ 系統尚未產生大綱資料，請先點擊上方產生參考文獻的大綱模式");
+      return;
+    }
+    setOutlineViewMode("view");
+  }}
+>
+  🔍 檢視模式 + 參考文獻
+</Button>
+
                       </div>
 
                       {outlineViewMode === "edit" ? (
