@@ -4,8 +4,8 @@ import { callLLM, mapMode, type StepName } from '@/lib/ai';
 import { prisma } from '@/lib/prisma';
 import { getAuthSession } from '@/lib/auth';
 
-type Ok = { outline: string; outlineId: string };
-type Err = { error: string };
+type Ok   = { outline: string; outlineId: string };
+type Err  = { error: string };
 type ResBody = Ok | Err;
 
 export default async function handler(
@@ -87,13 +87,13 @@ export default async function handler(
     }
   }
 
-  // --- 後處理：強制換行（中文 & 英文都能正確斷節） ---
+  // --- 後處理：強制換行（只在行首斷節，避免誤切“AI”等詞） ---
   outline = outline
-    // 在大節標號前加換行
-    .replace(/([IVX一二三四五六七八九十]+[\\.、]?)\s*/g, '\n$1 ')
-    // 在細節小標 (A. B. C.) 前也加換行
-    .replace(/([A-Z])\.[ \t]*/g, '\n$1. ')
-    // 移除多餘空行
+    // 在大節標號（一、二、I. II.）行首前插入換行
+    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVX]+\.)\s*/g, '$1$2 ')
+    // 在子編號（A. B. C.）行首前插入換行
+    .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
+    // 合併多於一行的空行
     .replace(/\n{2,}/g, '\n')
     .trim();
 
