@@ -2,7 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { callLLM, mapMode, type CallOptions } from '@/lib/ai';
+import { callLLM, mapMode } from '@/lib/ai';
 
 type Cand = {
   sectionKey: string;
@@ -21,25 +21,26 @@ type Res =
   | { error: string }
   | { spent: 0; candidates: Cand[] };
 
-// 从 outline.content 自动提取段落文本（支持中文“二、”和英文“2.”等）
+// 从 outline.content 自动提取段落文本（支持「一、」「2.」「III.」等）
 function extractSectionText(content: string, key: string): string {
   const lines = content.split(/\r?\n/);
   const start = lines.findIndex((l) => l.trim().startsWith(key));
   if (start === -1) return '';
-  // 下一段开始的行号
   const next = lines
     .slice(start + 1)
-    .findIndex((l) => /^[一二三四五六七八九十]+、/.test(l.trim()) || /^[0-9]+\./.test(l.trim()) || /^[IVX]+\./.test(l.trim()));
+    .findIndex((l) =>
+      /^[一二三四五六七八九十]+、/.test(l.trim()) ||
+      /^[0-9]+\.\s/.test(l.trim()) ||
+      /^[IVX]+\.\s/.test(l.trim())
+    );
   const end = next === -1 ? lines.length : start + 1 + next;
   return lines.slice(start, end).join('\n').trim();
 }
 
-// 生成搜索用的简短 Query
 function buildQuery(text: string): string {
   return text.replace(/\s+/g, ' ').slice(0, 200);
 }
 
-// 简单打分：有 DOI +25，有刊名 +10，基础 50，最高 95
 function scoreCredibility(p: { doi: boolean; venue?: string | null }): number {
   let s = 50;
   if (p.doi) s += 25;
@@ -47,7 +48,6 @@ function scoreCredibility(p: { doi: boolean; venue?: string | null }): number {
   return Math.min(95, s);
 }
 
-// 如果 web 端拉不到，再用 LLM 回退
 async function fallbackLLM(sectionKey: string, text: string): Promise<Cand[]> {
   const prompt = `
 你是學術助理。請根據下列段落提供 3 筆參考文獻（盡量包含 DOI），
@@ -55,34 +55,36 @@ async function fallbackLLM(sectionKey: string, text: string): Promise<Cand[]> {
 段落：${text}
 sectionKey: ${sectionKey}
 `;
-  const opt: CallOptions = mapMode('outline', 'gpt-3.5');
+  // 直接使用 mapMode 返回的配置对象
+  const opt = mapMode('outline', 'gpt-3.5');
   const raw = await callLLM([{ role: 'user', content: prompt }], opt);
   try {
     const arr = JSON.parse(raw.trim());
-    if (!Array.isArray(arr)) return [];
-    return arr.slice(0, 3).map((x: any) => ({
-      sectionKey,
-      title: String(x.title || ''),
-      url: String(x.url || ''),
-      doi: x.doi ?? null,
-      source: x.source ?? null,
-      authors: x.authors ?? null,
-      publishedAt: x.publishedAt ?? null,
-      type: x.type ?? 'OTHER',
-      credibility: typeof x.credibility === 'number' ? x.credibility : 60,
-      summary: x.summary ?? null,
-    }));
+    if (Array.isArray(arr)) {
+      return arr.slice(0, 3).map((x: any) => ({
+        sectionKey,
+        title: String(x.title || ''),
+        url: String(x.url || ''),
+        doi: x.doi ?? null,
+        source: x.source ?? null,
+        authors: x.authors ?? null,
+        publishedAt: x.publishedAt ?? null,
+        type: x.type ?? 'OTHER',
+        credibility: typeof x.credibility === 'number' ? x.credibility : 60,
+        summary: x.summary ?? null,
+      }));
+    }
   } catch {
-    return [];
+    // ignore parse errors
   }
+  return [];
 }
 
-// 先尝试 Crossref，再补足到 5 条用 Semantic Scholar，去重后返回前 need 条
 async function fetchFromWeb(sectionKey: string, text: string, need = 3): Promise<Cand[]> {
   const q = buildQuery(text);
   const out: Cand[] = [];
 
-  // 1) Crossref
+  // Crossref
   try {
     const cr = await fetch(
       `https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=${Math.max(need, 5)}`,
@@ -115,12 +117,11 @@ async function fetchFromWeb(sectionKey: string, text: string, need = 3): Promise
     /* ignore */
   }
 
-  // 2) Semantic Scholar
+  // Semantic Scholar
   try {
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
       q
     )}&limit=${Math.max(need, 5)}&fields=title,authors,year,venue,externalIds,url`;
-    // 如有 Key 则带上
     const headers: Record<string, string> = {};
     if (process.env.SEMANTIC_SCHOLAR_API_KEY) {
       headers['x-api-key'] = process.env.SEMANTIC_SCHOLAR_API_KEY;
@@ -151,7 +152,7 @@ async function fetchFromWeb(sectionKey: string, text: string, need = 3): Promise
     /* ignore */
   }
 
-  // 去重（优先保留有 DOI）
+  // 去重并取前 need 条
   const dedup = new Map<string, Cand>();
   for (const c of out) {
     const key = (c.doi || c.url || c.title).toLowerCase();
@@ -160,7 +161,6 @@ async function fetchFromWeb(sectionKey: string, text: string, need = 3): Promise
   return Array.from(dedup.values()).slice(0, need);
 }
 
-// Handler 主逻辑
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Res>
@@ -190,7 +190,6 @@ export default async function handler(
     return res.status(400).json({ error: '缺少必要參數' });
   }
 
-  // 确保此 outline 属于当前用户
   const outline = await prisma.outline.findFirst({
     where: { id: outlineId, userId: session.user.id },
     select: { content: true },
@@ -199,7 +198,6 @@ export default async function handler(
     return res.status(404).json({ error: '找不到對應的大綱' });
   }
 
-  // 优先使用前端传来的 text，否则自动抽
   const text = rawText.trim() || extractSectionText(outline.content, sectionKey);
   if (!text) {
     return res.status(400).json({ error: '該段落無可用內容，請手動輸入' });
