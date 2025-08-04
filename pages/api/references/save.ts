@@ -44,10 +44,8 @@ export default async function handler(
     return res.status(400).json({ error: '請提供 1~3 筆有效的參考文獻' });
   }
 
-  // Debug log（除錯用）
   console.log("📦 儲存參考文獻 req.body:", { outlineId, userId, itemsLength: items.length });
 
-  // 確認 outlineId 對應的 Outline 存在且屬於當前使用者
   const outline = await prisma.outline.findFirst({
     where: { id: outlineId, userId },
     select: { id: true },
@@ -62,7 +60,7 @@ export default async function handler(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 扣點
+      // 扣點數
       const me = await tx.user.update({
         where: { id: userId },
         data: { credits: { decrement: spent } },
@@ -72,6 +70,25 @@ export default async function handler(
       const saved: any[] = [];
 
       for (const it of items) {
+        // 防呆：缺 URL 或格式錯
+        if (!it.url || typeof it.url !== 'string') {
+          console.warn("❌ 無效的 URL:", it);
+          continue;
+        }
+
+        // 防止重複：同一 outline + 段落 + URL 不重複儲存
+        const exists = await tx.reference.findFirst({
+          where: {
+            outlineId,
+            sectionKey: it.sectionKey,
+            url: it.url,
+          },
+        });
+        if (exists) {
+          console.log("🔁 文獻已存在，略過:", it.url);
+          continue;
+        }
+
         const rec = await tx.reference.create({
           data: {
             userId,
@@ -82,9 +99,7 @@ export default async function handler(
             doi: it.doi ?? null,
             source: it.source ?? null,
             authors: it.authors ?? null,
-            publishedAt: it.publishedAt
-              ? new Date(it.publishedAt as any)
-              : null,
+            publishedAt: it.publishedAt ? new Date(it.publishedAt as any) : null,
             type: it.type ?? 'OTHER',
             summary: it.summary ?? null,
             credibility: typeof it.credibility === 'number' ? it.credibility : 0,
@@ -110,10 +125,10 @@ export default async function handler(
     return res.status(200).json({
       spent,
       remainingCredits: result.remainingCredits,
-      saved: result.saved,
+      saved: result.saved ?? [],
     });
   } catch (err: any) {
     console.error('❌ 儲存失敗 [refs/save]', err);
-    return res.status(500).json({ error: '儲存失敗，請稍後再試' });
+    return res.status(500).json({ error: '儲存失敗：' + (err.message || '未知錯誤') });
   }
 }
