@@ -9,10 +9,10 @@ const UA_SITE = process.env.NEXT_PUBLIC_APP_URL || 'https://assignment-terminato
 type GatherReq = {
   outlineId: string;
   maxPerSection?: number;
-  fixedPerSection?: number;                // ① 固定每段 N 筆
-  customPlan?: Record<string, number>;     // ② 完全自訂
-  sources?: ('crossref' | 'wiki')[];       // ③ 指定來源
-  preview?: boolean;                       // true => 不寫 DB、不扣點
+  fixedPerSection?: number;
+  customPlan?: Record<string, number>;
+  sources?: ('crossref' | 'wiki')[];
+  preview?: boolean;
 };
 
 type RefItem = {
@@ -23,9 +23,9 @@ type RefItem = {
   source?: string | null;
   authors?: string | null;
   publishedAt?: string | null;
-  type?: string;                 // JOURNAL | WIKI | OTHER
+  type?: string;
   summary?: string | null;
-  credibility?: number;          // 0–100
+  credibility?: number;
 };
 
 type ResBody =
@@ -45,11 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     customPlan,
     sources = ['crossref', 'wiki'],
     preview = false,
-  } = (req.body ?? {}) as GatherReq;
+  } = req.body as GatherReq;
 
   if (!outlineId) return res.status(400).json({ error: '缺少 outlineId' });
 
-  // 讀取大綱 & 使用者
   const [outline, user] = await Promise.all([
     prisma.outline.findFirst({
       where: { id: outlineId, userId: session.user.id },
@@ -57,37 +56,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }),
     prisma.user.findUnique({ where: { id: session.user.id }, select: { id: true, credits: true } }),
   ]);
+
   if (!outline) return res.status(404).json({ error: '大綱不存在或無權限' });
   if (!user) return res.status(404).json({ error: '使用者不存在' });
 
-  /* ---------- Step1：產生 plan ---------- */
   let plan: Record<string, number> = {};
 
   if (customPlan && Object.keys(customPlan).length) {
-    // ② 自訂
     plan = clampPlan(customPlan, maxPerSection);
   } else if (fixedPerSection && fixedPerSection > 0) {
-    // ① 固定
     plan = { I: Math.min(fixedPerSection, maxPerSection) };
   } else {
-    // LLM 自動
     plan = await getPlanByLLM(outline.content, maxPerSection);
   }
 
   const totalNeed = Object.values(plan).reduce((a, b) => a + b, 0);
 
-  /* ---------- Step2：點數檢查 ---------- */
   if (!preview && user.credits < totalNeed) {
     return res.status(402).json({ error: `點數不足：需 ${totalNeed} 點，剩餘 ${user.credits} 點` });
   }
 
-  /* ---------- Step3：實際蒐集 ---------- */
   const toSave: RefItem[] = [];
   for (const [sectionKey, need] of Object.entries(plan)) {
     const q = buildQuery(outline.title, outline.content, sectionKey);
     const cands = await gatherCandidates(q, need, sources);
-    cands.forEach((c) => (c.sectionKey = sectionKey));
-    toSave.push(...cands);
+    for (const c of cands) {
+      c.sectionKey = sectionKey;
+      c.summary = await explainReference(c.title, outline.title, sectionKey);
+      toSave.push(c);
+    }
   }
 
   if (preview) {
@@ -99,7 +96,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     });
   }
 
-  /* ---------- Step4：寫 DB + 扣點 ---------- */
   const data = toSave.map((c) => ({
     userId: user.id,
     outlineId: outline.id,
@@ -135,24 +131,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       });
     }
 
-    const remain = user.credits - spent;
-    return { spent, remain };
+    return { spent, remain: user.credits - spent };
   });
 
   const rows = await prisma.reference.findMany({
     where: { outlineId: outline.id, userId: user.id },
     orderBy: [{ sectionKey: 'asc' }, { credibility: 'desc' }, { createdAt: 'asc' }],
-    select: { sectionKey: true, title: true, url: true, doi: true, source: true, authors: true, credibility: true },
+    select: {
+      sectionKey: true,
+      title: true,
+      url: true,
+      doi: true,
+      source: true,
+      authors: true,
+      credibility: true,
+      summary: true,
+    },
   });
 
-  return res.status(200).json({
-    saved: rows,
-    spent: txRes.spent,
-    remainingCredits: txRes.remain,
-  });
+  return res.status(200).json({ saved: rows, spent: txRes.spent, remainingCredits: txRes.remain });
 }
-
-/* ---------------- helpers ---------------- */
 
 function clampPlan(raw: Record<string, number>, cap: number) {
   const out: Record<string, number> = {};
@@ -164,8 +162,7 @@ function clampPlan(raw: Record<string, number>, cap: number) {
 }
 
 async function getPlanByLLM(outline: string, cap: number) {
-  const prompt = `下面的大綱，請輸出 JSON 形式（鍵=段落 key，值=建議引用數 1~${cap}）。僅輸出 JSON：
-${outline}`;
+  const prompt = `下面的大綱，請輸出 JSON 形式（鍵=段落 key，值=建議引用數 1~${cap}）。僅輸出 JSON：\n${outline}`;
   try {
     const raw = await callLLM(
       [{ role: 'user', content: prompt }],
@@ -181,6 +178,16 @@ function buildQuery(title: string, outline: string, sectionKey: string) {
   const line = outline.split('\n').find((l) => l.trim().startsWith(sectionKey));
   const hint = line ? line.replace(/^[IVX\.A-Z\)\s-]+/, '').slice(0, 120) : '';
   return `${title} ${sectionKey} ${hint}`.trim();
+}
+
+async function explainReference(title: string, paperTitle: string, sectionKey: string) {
+  const prompt = `以下是學生寫作主題《${paperTitle}》的第 ${sectionKey} 段落主題，請說明下面這篇文獻的價值：\n\n文獻標題：「${title}」\n\n請輸出三段：\n1. 此文獻哪一句最具價值？\n2. 這篇文獻有什麼優點、可信之處或特點？\n3. 建議將這篇文獻用在寫作的哪一句？（可創作建議句）`;
+  const out = await callLLM([{ role: 'user', content: prompt }], {
+    model: process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
+    temperature: 0.4,
+    timeoutMs: 15000,
+  });
+  return out.trim();
 }
 
 async function gatherCandidates(query: string, need: number, sources: ('crossref' | 'wiki')[]): Promise<RefItem[]> {
@@ -209,9 +216,7 @@ async function gatherCandidates(query: string, need: number, sources: ('crossref
               .map((a: any) => [a?.given, a?.family].filter(Boolean).join(' '))
               .filter(Boolean)
               .join('; ') || null,
-            publishedAt: it?.issued?.['date-parts']?.[0]?.[0]
-              ? `${it.issued['date-parts'][0][0]}-01-01`
-              : null,
+            publishedAt: it?.issued?.['date-parts']?.[0]?.[0] ? `${it.issued['date-parts'][0][0]}-01-01` : null,
             type: 'JOURNAL',
             credibility: 85,
           });
