@@ -634,51 +634,46 @@ function ReferenceDialog({
   const [cands, setCands] = useState<ReferenceItem[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({}); // url -> checked
 
-  async function suggest() {
-    console.log("📦 API 參數確認", { outlineId, sectionKey, text: bulletText });
+async function suggest() {
+  console.log("📦 API 參數確認", { outlineId, sectionKey, text: bulletText });
 
-    // ✅ 防呆：避免空參數導致 400 錯誤
-    if (!outlineId || !sectionKey || !bulletText?.trim()) {
-      alert("⚠️ 缺少必要資料，請先產生大綱再試一次");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const r = await fetch("/api/references/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          outlineId,
-          sectionKey,
-          text: bulletText,
-          source: "web",
-        }),
-      }).then((res) => res.json());
-
-      if (r?.error) throw new Error(r.error);
-
-      const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
-        sectionKey,
-        title: it.title,
-        url: it.url,
-        doi: it.doi ?? null,
-        source: it.source ?? null,
-        authors: it.authors ?? null,
-        publishedAt: it.publishedAt ?? null,
-        type: it.type ?? "OTHER",
-        credibility: it.credibility ?? null,
-        summary: it.summary ?? null,
-      }));
-
-      setCands(list);
-      setPicked({});
-    } catch (e: any) {
-      alert("❌ 無法取得參考文獻候選：" + (e.message || "未知錯誤"));
-    } finally {
-      setBusy(false);
-    }
+  // ✅ 二次防呆，避免 race condition 導致 outlineId 為空
+  if (!outlineId || outlineId.length < 6 || !sectionKey || !bulletText?.trim()) {
+    alert("⚠️ 系統資料尚未準備好，請稍後再嘗試加入參考文獻");
+    return;
   }
+
+  setBusy(true);
+  try {
+    const r = await fetch("/api/references/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ outlineId, sectionKey, text: bulletText, source: "web" }),
+    }).then((x) => x.json());
+
+    if (r?.error) throw new Error(r.error);
+
+    const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
+      sectionKey,
+      title: it.title,
+      url: it.url,
+      doi: it.doi ?? null,
+      source: it.source ?? null,
+      authors: it.authors ?? null,
+      publishedAt: it.publishedAt ?? null,
+      type: it.type ?? "OTHER",
+      credibility: it.credibility ?? null,
+      summary: it.summary ?? null,
+    }));
+
+    setCands(list);
+    setPicked({});
+  } catch (e: any) {
+    alert("❌ 無法取得參考文獻：" + (e.message || "未知錯誤"));
+  } finally {
+    setBusy(false);
+  }
+}
 
   async function save() {
     const items = cands.filter((c) => picked[c.url]);
