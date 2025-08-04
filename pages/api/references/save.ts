@@ -1,4 +1,3 @@
-// pages/api/references/save.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -11,7 +10,7 @@ type Item = {
   doi?: string | null;
   source?: string | null;
   authors?: string | null;
-  publishedAt?: string | null | Date; // 允許 Date 或 ISO string
+  publishedAt?: string | null | Date;
   type?: string | null;
   credibility?: number | null;
   summary?: string | null;
@@ -26,36 +25,39 @@ export default async function handler(
   res: NextApiResponse<Res>
 ) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return res.status(405).json({ error: '只接受 POST 請求' });
   }
 
   const session = await getAuthSession(req, res);
   if (!session?.user?.id) {
-    return res.status(401).json({ error: '未登入' });
+    return res.status(401).json({ error: '尚未登入，請先登入再操作' });
   }
 
-  // ✅ 關鍵：固定 userId，之後都用這個變數
-  const userId = session.user.id as string;
+  const userId = session.user.id;
+  const { outlineId, items, mode = 'web' } = req.body as {
+    outlineId?: string;
+    items?: Item[];
+    mode?: string;
+  };
 
-  const {
-    outlineId,
-    items,
-    mode = 'web',
-  } = (req.body || {}) as { outlineId: string; items: Item[]; mode?: string };
-
-  if (!outlineId || !Array.isArray(items) || items.length === 0 || items.length > 3) {
-    return res.status(400).json({ error: '請提供 1~3 筆要儲存的文獻' });
+  if (!outlineId || !Array.isArray(items) || items.length < 1 || items.length > 3) {
+    return res.status(400).json({ error: '請提供 1~3 筆有效的參考文獻' });
   }
 
+  // Debug log（除錯用）
+  console.log("📦 儲存參考文獻 req.body:", { outlineId, userId, itemsLength: items.length });
+
+  // 確認 outlineId 對應的 Outline 存在且屬於當前使用者
   const outline = await prisma.outline.findFirst({
     where: { id: outlineId, userId },
     select: { id: true },
   });
+
   if (!outline) {
-    return res.status(404).json({ error: '大綱不存在' });
+    console.warn("⚠️ 找不到 Outline，可能是 userId 不符或資料不存在", { outlineId, userId });
+    return res.status(404).json({ error: '找不到對應的大綱，請重新產生後再試' });
   }
 
-  // 預設每次 1 點；若你在 points.ts 有設定 refs 的 cost，就會取到對應值
   const spent = Number(getCost('refs', mode) ?? 1) || 1;
 
   try {
@@ -68,6 +70,7 @@ export default async function handler(
       });
 
       const saved: any[] = [];
+
       for (const it of items) {
         const rec = await tx.reference.create({
           data: {
@@ -84,13 +87,13 @@ export default async function handler(
               : null,
             type: it.type ?? 'OTHER',
             summary: it.summary ?? null,
-            credibility:
-              typeof it.credibility === 'number' ? it.credibility : 0,
+            credibility: typeof it.credibility === 'number' ? it.credibility : 0,
           },
         });
         saved.push(rec);
       }
 
+      // 建立扣點紀錄
       await tx.transaction.create({
         data: {
           userId,
@@ -104,15 +107,13 @@ export default async function handler(
       return { remainingCredits: me.credits, saved };
     });
 
-    return res
-      .status(200)
-      .json({
-        spent,
-        remainingCredits: result.remainingCredits,
-        saved: result.saved,
-      });
-  } catch (e) {
-    console.error('[refs/save]', e);
+    return res.status(200).json({
+      spent,
+      remainingCredits: result.remainingCredits,
+      saved: result.saved,
+    });
+  } catch (err: any) {
+    console.error('❌ 儲存失敗 [refs/save]', err);
     return res.status(500).json({ error: '儲存失敗，請稍後再試' });
   }
 }
