@@ -1,3 +1,4 @@
+// pages/api/references/save.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getAuthSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -44,23 +45,18 @@ export default async function handler(
     return res.status(400).json({ error: '請提供 1~3 筆有效的參考文獻' });
   }
 
-  console.log("📦 儲存參考文獻 req.body:", { outlineId, userId, itemsLength: items.length });
-
-  const outline = await prisma.outline.findFirst({
-    where: { id: outlineId, userId },
-    select: { id: true },
-  });
-
+  // 確認 outline 存在且屬於 user
+  const outline = await prisma.outline.findFirst({ where: { id: outlineId, userId } });
   if (!outline) {
-    console.warn("⚠️ 找不到 Outline，可能是 userId 不符或資料不存在", { outlineId, userId });
     return res.status(404).json({ error: '找不到對應的大綱，請重新產生後再試' });
   }
 
+  // 計算費用
   const spent = Number(getCost('refs', mode) ?? 1) || 1;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 扣點數
+      // 扣點
       const me = await tx.user.update({
         where: { id: userId },
         data: { credits: { decrement: spent } },
@@ -68,53 +64,55 @@ export default async function handler(
       });
 
       const saved: any[] = [];
-
       for (const it of items) {
-        // 防呆：缺 URL 或格式錯
-        if (!it.url || typeof it.url !== 'string') {
-          console.warn("❌ 無效的 URL:", it);
-          continue;
-        }
+        // URL 必要
+        if (!it.url || typeof it.url !== 'string') continue;
 
-        // 防止重複：同一 outline + 段落 + URL 不重複儲存
-        const exists = await tx.reference.findFirst({
-          where: {
-            outlineId,
-            sectionKey: it.sectionKey,
-            url: it.url,
-          },
-        });
-        if (exists) {
-          console.log("🔁 文獻已存在，略過:", it.url);
-          continue;
+        // 檢查重複：outline+section+url OR 全域 doi
+        const orConditions: any[] = [
+          { outlineId, sectionKey: it.sectionKey, url: it.url }
+        ];
+        if (it.doi) {
+          orConditions.push({ doi: it.doi });
         }
+        const exists = await tx.reference.findFirst({ where: { OR: orConditions } });
+        if (exists) continue;
 
-        const rec = await tx.reference.create({
-          data: {
-            userId,
-            outlineId,
-            sectionKey: it.sectionKey,
-            title: it.title.slice(0, 512),
-            url: it.url,
-            doi: it.doi ?? null,
-            source: it.source ?? null,
-            authors: it.authors ?? null,
-            publishedAt: it.publishedAt ? new Date(it.publishedAt as any) : null,
-            type: it.type ?? 'OTHER',
-            summary: it.summary ?? null,
-            credibility: typeof it.credibility === 'number' ? it.credibility : 0,
-          },
-        });
-        saved.push(rec);
+        try {
+          const rec = await tx.reference.create({
+            data: {
+              userId,
+              outlineId,
+              sectionKey: it.sectionKey,
+              title: it.title.slice(0, 512),
+              url: it.url,
+              doi: it.doi ?? null,
+              source: it.source ?? null,
+              authors: it.authors ?? null,
+              publishedAt: it.publishedAt ? new Date(it.publishedAt as any) : null,
+              type: it.type ?? 'OTHER',
+              summary: it.summary ?? null,
+              credibility: typeof it.credibility === 'number' ? it.credibility : 0,
+            },
+          });
+          saved.push(rec);
+        } catch (e: any) {
+          // 如果是 doi 重複，跳過
+          if (e.code === 'P2002' && e.meta?.target?.includes('doi')) {
+            console.warn('跳過重複 DOI', it.doi);
+            continue;
+          }
+          throw e;
+        }
       }
 
-      // 建立扣點紀錄
+      // 紀錄交易，只為實際儲存數量扣點
       await tx.transaction.create({
         data: {
           userId,
-          amount: -spent,
+          amount: -saved.length * spent,
           type: 'USAGE',
-          description: `段落參考文獻加入（${items.length} 筆）`,
+          description: `段落參考文獻加入（${saved.length} 筆）`,
           performedBy: userId,
         },
       });
@@ -125,7 +123,7 @@ export default async function handler(
     return res.status(200).json({
       spent,
       remainingCredits: result.remainingCredits,
-      saved: result.saved ?? [],
+      saved: result.saved,
     });
   } catch (err: any) {
     console.error('❌ 儲存失敗 [refs/save]', err);
