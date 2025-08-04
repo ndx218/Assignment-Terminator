@@ -399,12 +399,16 @@ export default function EasyWorkUI() {
                           onClick={() => setOutlineViewMode("edit")}
                         >
                           ✏️ 編輯模式
-                        </Button>
-                        <Button
+                       <Button
                           variant={outlineViewMode === "view" ? "default" : "outline"}
                           size="sm"
-                          onClick={() => setOutlineViewMode("view")}
-                          disabled={!outlineId || !(results.outline?.trim())}
+                          onClick={() => {
+                            if (!outlineId || !(results.outline?.trim())) {
+                              alert("⚠️ 系統仍在載入大綱資料，請稍候再進入參考文獻檢視模式");
+                              return;
+                            }
+                            setOutlineViewMode("view");
+                          }}
                         >
                           👁️ 檢視＋參考文獻
                         </Button>
