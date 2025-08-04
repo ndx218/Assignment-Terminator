@@ -244,7 +244,7 @@ export default function EasyWorkUI() {
           {" ｜ 目前剩餘 "}
           <span className="font-bold text-blue-600">{credits}</span> 點
         </div>
-        <Button
+        <Button>
           variant="ghost"
           className="text-red-600 hover:text-black px-2 py-1"
           onClick={() => {
