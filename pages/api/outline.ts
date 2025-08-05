@@ -1,4 +1,4 @@
-/* /pages/api/outline.ts */
+// /pages/api/outline.ts
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { callLLM, mapMode, type StepName } from '@/lib/ai';
 import { prisma } from '@/lib/prisma';
@@ -44,14 +44,42 @@ export default async function handler(
     return res.status(400).json({ error: '缺少必要字段' });
   }
 
-  const prompt = `請根據以下資料產生段落大綱：
+  // —— 在這裡新增「二級要點」示範與格式化指引 ——  
+  const prompt = `
+請產生「段落式大綱」，**務必**照以下規則：
+1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
+2. 每節標題獨立一行，後面不加任何符號。
+3. 每節下至少 2–4 條「- 主要點」，並在必要時為每個主要點再加 a./b. 子要點。
+4. 要解說文字。
+5. 不要多餘空行。
+
+【需求】
 題目：${title}
 字數：約 ${wc}
 語言：${language}（語氣：${tone}）
 細節：${detail}
 引用：${reference}
 評分準則：${rubric}
-段落要求：${paragraph || '依內容合理規劃'} 段`;
+段落要求：${paragraph || '依內容合理規劃'} 段
+
+【中文輸出範例】
+一、 引言
+- 介紹人工智慧（AI）的概念
+  a. 定義：模擬人類認知的技術
+  b. 關鍵能力：學習、推理、感知
+- 討論 AI 的重要性
+  a. 社會影響：自動化與效率
+  b. 經濟影響：創新與競爭
+
+二、 AI 的核心概念
+- 弱 AI vs. 強 AI
+  a. 弱 AI：專注任務，如推薦系統
+  b. 強 AI：通用智慧，仍在研究
+- 機器學習與深度學習
+  a. ML：數據驅動模式識別
+  b. DL：多層神經網路
+
+請直接輸出，不要額外說明。`.trim();
 
   // --- 呼叫 LLM（含 fallback） ---
   let outline = '';
@@ -74,26 +102,18 @@ export default async function handler(
       return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
     }
     // fallback to GPT-3.5
-    try {
-      const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
-      modelUsed = opt2.model;
-      outline = await callLLM(
-        [{ role: 'user', content: prompt }],
-        { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
-      );
-    } catch (e2: any) {
-      console.error('[outline:fallback]', { mode, err: String(e2?.message ?? e2) });
-      return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
-    }
+    const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
+    modelUsed = opt2.model;
+    outline = await callLLM(
+      [{ role: 'user', content: prompt }],
+      { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
+    );
   }
 
-  // --- 後處理：強制換行（只在行首斷節，避免誤切“AI”等詞） ---
+  // --- 後處理：強制換行（只在行首斷節，避免誤切「AI」等詞） ---
   outline = outline
-    // 在大節標號（一、二、I. II.）行首前插入換行
     .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVX]+\.)\s*/g, '$1$2 ')
-    // 在子編號（A. B. C.）行首前插入換行
     .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
-    // 合併多於一行的空行
     .replace(/\n{2,}/g, '\n')
     .trim();
 
