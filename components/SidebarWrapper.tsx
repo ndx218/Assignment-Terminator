@@ -1,9 +1,10 @@
+// components/SidebarWrapper.tsx
 'use client';
 
-import { useEffect, useCallback, useState } from "react";
-import { Menu } from "lucide-react";
+import { useEffect, useCallback, useState } from 'react';
+import { Menu } from 'lucide-react';
 import Sidebar from './Sidebar';
-import TopBar from './TopBar';  // 新增頂部導覽列
+import { TopBar } from './TopBar';
 
 export default function SidebarWrapper() {
   const [open, setOpen] = useState(false);
@@ -26,7 +27,7 @@ export default function SidebarWrapper() {
 
   return (
     <>
-      {/* 全局頂部導覽列 */}
+      {/* 頂部導覽列 */}
       <TopBar />
 
       {/* 📱 手機版漢堡按鈕 */}
