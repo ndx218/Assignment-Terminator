@@ -78,13 +78,11 @@ function ensureMinSections(
   const targetCount = needBodies + 2; // Intro + bodies + Conclusion
 
   if (secs.length >= 3) {
-    // 已經足夠就不硬拆，但仍會在後面固定命名
+    // 夠用就不硬補
   } else if (secs.length === 2) {
-    // 第一節視為引言；第二節視為主體段1；補齊其餘主體段與結論
     while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
     secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
   } else if (secs.length === 1) {
-    // 只有一節（引言），補主體段和結論
     while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
     secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
   }
@@ -247,6 +245,83 @@ function appendWordBudgets(
   return lines.join('\n');
 }
 
+/* ================== 章節解析與缺內容回填（自動補子彈） ================== */
+function parseSections(text: string) {
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
+  const lines = text.split(/\r?\n/);
+  const idxs: number[] = [];
+  for (let i = 0; i < lines.length; i++) if (headerRe.test(lines[i])) idxs.push(i);
+  const secs = idxs.map((start, i) => {
+    const end = i + 1 < idxs.length ? idxs[i + 1] : lines.length;
+    const header = lines[start];
+    const body = lines.slice(start + 1, end);
+    const m = header.match(headerRe)!;
+    return { start, end, header, title: m[2].trim(), body };
+  });
+  return { lines, secs, headerRe };
+}
+
+function isMissingBody(bodyLines: string[]) {
+  const clean = bodyLines.map(s => s.trim()).filter(Boolean);
+  if (clean.length === 0) return true;
+  const onlyPlaceholders = clean.every(s =>
+    /^[-•]?\s*[（(]/.test(s) || /^> 說明：/.test(s)
+  );
+  const hasBullet = clean.some(s => /^[-•]\s+/.test(s));
+  return onlyPlaceholders || !hasBullet;
+}
+
+async function backfillMissingBullets(
+  outline: string,
+  ctx: { title: string; language: string; tone: string; detail?: string; reference?: string },
+  llmOpt: { model: string; temperature?: number; timeoutMs?: number; title?: string; referer?: string }
+) {
+  const { lines, secs } = parseSections(outline);
+  const missing = secs.filter(s => isMissingBody(s.body));
+  if (missing.length === 0) return outline;
+
+  for (const sec of missing) {
+    const prompt = `
+請用「${ctx.language}」為主題《${ctx.title}》中的章節「${sec.title}」補出 3–5 條要點：
+- 直接輸出每行以「- 」開頭的子彈點
+- 不要加章節標題、不要加小節編號或其他說明
+- 語氣：${ctx.tone}
+- 盡量呼應本文的整體主題；可參考：${(ctx.detail || '').slice(0, 200)}
+`.trim();
+
+    let bullets = '';
+    try {
+      bullets = await callLLM([{ role: 'user', content: prompt }], {
+        ...llmOpt,
+        temperature: Math.min(0.8, (llmOpt.temperature ?? 0.6)),
+        timeoutMs: Math.max(30_000, llmOpt.timeoutMs ?? 30_000),
+        title: 'Outline Backfill',
+      });
+    } catch {
+      continue; // 忽略失敗，保留佔位
+    }
+
+    const cleaned = String(bullets || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => (s.startsWith('- ') ? s : `- ${s}`));
+
+    // 找最後一條「> 說明：」
+    let explain: string | null = null;
+    for (let i = sec.body.length - 1; i >= 0; i--) {
+      const t = sec.body[i]?.trim();
+      if (t && /^> 說明：/.test(t)) { explain = sec.body[i]; break; }
+    }
+
+    const newBody = [...cleaned.slice(0, 5), ...(explain ? [explain] : [])];
+    lines.splice(sec.start + 1, sec.end - (sec.start + 1), ...newBody);
+  }
+
+  return lines.join('\n');
+}
+
+/* ================== Handler ================== */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResBody>,
@@ -370,7 +445,7 @@ ${planHint ? '\n' + planHint : ''}
     }
   }
 
-  // --- 後處理：升級/清理標題 → 補齊章節 → 固定命名 → 加建議字數 ---
+  // --- 後處理：升級/清理標題 → 補齊章節 → 固定命名 → 加建議字數 → 回填缺內容 ---
   outline = normalizeHeaders(outline, String(language || '中文'));
 
   outline = outline
@@ -379,7 +454,7 @@ ${planHint ? '\n' + planHint : ''}
     .replace(/\n{2,}/g, '\n')
     .trim();
 
-  // 讀主體段數：優先 paragraphPlan.bodyCount，其次 paragraph（純數字），預設 3
+  // 主體段數：優先 paragraphPlan.bodyCount，其次 paragraph（純數字），預設 3
   const desiredBodyCount =
     Number((req.body as any)?.paragraphPlan?.bodyCount) ||
     (Number.isFinite(parseInt(String(paragraph), 10)) ? parseInt(String(paragraph), 10) : 3);
@@ -387,6 +462,18 @@ ${planHint ? '\n' + planHint : ''}
   outline = ensureMinSections(outline, String(language || '中文'), desiredBodyCount);
   outline = normalizeSectionTitles(outline, String(language || '中文'), paragraphPlan);
   outline = appendWordBudgets(outline, language, wc, paragraphPlan);
+
+  // ★ 自動回填缺內容的章節（補 3–5 條要點）
+  try {
+    const optForBackfill = mapMode('outline' as StepName, mode);
+    outline = await backfillMissingBullets(
+      outline,
+      { title, language, tone, detail, reference },
+      optForBackfill
+    );
+  } catch {
+    // 忽略回填失敗，保留現況
+  }
 
   const finalOutline = outline.slice(0, 100_000);
 
