@@ -44,13 +44,13 @@ export default async function handler(
     return res.status(400).json({ error: '缺少必要字段' });
   }
 
-  // —— 在這裡新增「二級要點」示範與格式化指引 ——  
+  // —— 你的提示詞（保留你的二級要點規則，另外加上「> 說明：」行，供學生閱讀、不影響文獻抓取）——
   const prompt = `
 請產生「段落式大綱」，**務必**照以下規則：
 1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
 2. 每節標題獨立一行，後面不加任何符號。
-3. 每節下至少 2–4 條「- 主要點」，並在必要時為每個主要點再加 a./b. 子要點。
-4. 要解說文字。
+3. 每節下至少 2–4 條「- 主要點」，可視需要在每條主要點下再加 a./b. 子要點（縮排兩空白）。
+4. 每個章節最後加 1 行補充說明，開頭寫 **"> 說明："**（提供脈絡與延伸，不要放連結）。
 5. 不要多餘空行。
 
 【需求】
@@ -70,6 +70,7 @@ export default async function handler(
 - 討論 AI 的重要性
   a. 社會影響：自動化與效率
   b. 經濟影響：創新與競爭
+> 說明：本段建立主題背景與重要性，為後文鋪陳。
 
 二、 AI 的核心概念
 - 弱 AI vs. 強 AI
@@ -78,8 +79,9 @@ export default async function handler(
 - 機器學習與深度學習
   a. ML：數據驅動模式識別
   b. DL：多層神經網路
+> 說明：本段釐清術語與範疇，降低誤解。
 
-請直接輸出，不要額外說明。`.trim();
+請直接輸出大綱內容，不要額外說明。`.trim();
 
   // --- 呼叫 LLM（含 fallback） ---
   let outline = '';
@@ -101,7 +103,7 @@ export default async function handler(
       console.error('[outline:first-call]', { mode, err: msg });
       return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
     }
-    // fallback to GPT-3.5
+    // fallback to GPT-3.5（保留你的行為）
     const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
     modelUsed = opt2.model;
     outline = await callLLM(
@@ -112,10 +114,16 @@ export default async function handler(
 
   // --- 後處理：強制換行（只在行首斷節，避免誤切「AI」等詞） ---
   outline = outline
-    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVX]+\.)\s*/g, '$1$2 ')
+    // 中文數字或羅馬/阿拉伯章節號 → 保留行首
+    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDM]+\.)\s*/g, '$1$2 ')
+    // 子編號 A. B. C. 行首
     .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
+    // 合併多餘空行
     .replace(/\n{2,}/g, '\n')
     .trim();
+
+  // --- 在每個章節標題後面加上「建議字數」 ---
+  outline = appendWordBudgets(outline, language, wc);
 
   // 防守：避免超長
   const finalOutline = outline.slice(0, 100_000);
@@ -138,4 +146,84 @@ export default async function handler(
     console.error('[outline:db]', { err: String(dbErr?.message ?? dbErr) });
     return res.status(500).json({ error: '資料庫錯誤，請稍後再試' });
   }
+}
+
+/* ================== 小工具：在標題後面加「建議字數」 ================== */
+/**
+ * 規則：
+ * - 偵測章節標題行（中文一、二…；阿拉伯 1. 2.…；羅馬 I. II.…）
+ * - 若 >=3 節：Intro 14%、Conclusion 14%，其餘 Body 平分 72%
+ * - 若 2 節：40% / 60%
+ * - 其餘：平均分配
+ * - 中文顯示「（約 N 字）」；英文顯示「 (≈ N words)」
+ */
+function appendWordBudgets(raw: string, language: string, total: number) {
+  const lines = raw.split(/\r?\n/);
+
+  // 抓章節標題（行首）
+  const headerRegex = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\.)|(?:\d+\.))\s*(.+)$/;
+  const headers: { idx: number; marker: string; title: string }[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(headerRegex);
+    if (m) {
+      const marker = m[1];
+      const title = m[2].trim();
+      headers.push({ idx: i, marker, title });
+    }
+  }
+
+  if (headers.length === 0) return raw;
+
+  // 判斷 Intro / Conclusion（若沒寫明，預設第一個/最後一個）
+  const isZH = /中|中文|zh/i.test(language);
+  const introIdx =
+    headers.find(h => /引言|前言|introduction/i.test(h.title))?.idx ?? headers[0].idx;
+  const conclusionIdx =
+    headers.find(h => /結論|總結|結語|conclusion/i.test(h.title))?.idx ?? headers[headers.length - 1].idx;
+
+  // 配權重
+  const weights: number[] = new Array(headers.length).fill(0);
+  if (headers.length >= 3) {
+    const introW = 0.14;
+    const conclW = 0.14;
+    const remain = 1 - introW - conclW;
+    const bodyCount = headers.length - 2;
+    for (let i = 0; i < headers.length; i++) {
+      if (i === headers.findIndex(h => h.idx === introIdx)) weights[i] = introW;
+      else if (i === headers.findIndex(h => h.idx === conclusionIdx)) weights[i] = conclW;
+      else weights[i] = remain / bodyCount;
+    }
+  } else if (headers.length === 2) {
+    weights[0] = 0.4;
+    weights[1] = 0.6;
+  } else {
+    weights[0] = 1;
+  }
+
+  // 轉成實際字數（四捨五入到 10）
+  let budgets = weights.map(w => Math.max(50, Math.round((total * w) / 10) * 10));
+  // 微調總和差距
+  const diff = total - budgets.reduce((a, b) => a + b, 0);
+  if (diff !== 0) {
+    const sign = diff > 0 ? 1 : -1;
+    for (let i = 0, left = Math.abs(diff); i < headers.length && left > 0; i++) {
+      budgets[i] += 10 * sign;
+      left -= 10;
+    }
+  }
+
+  // 套到每個標題行（先移除舊的括號字數，避免重覆）
+  const cleanTail = isZH
+    ? /\s*（約\s*\d+\s*字）\s*$/
+    : /\s*\(≈\s*\d+\s*words\)\s*$/i;
+
+  headers.forEach((h, idx) => {
+    const budget = budgets[idx];
+    const suffix = isZH ? `（約 ${budget} 字）` : ` (≈ ${budget} words)`;
+    const original = lines[h.idx].replace(cleanTail, '');
+    lines[h.idx] = `${original}${suffix}`;
+  });
+
+  return lines.join('\n');
 }
