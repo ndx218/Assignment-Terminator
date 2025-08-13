@@ -8,7 +8,7 @@ type Ok   = { outline: string; outlineId: string };
 type Err  = { error: string };
 type ResBody = Ok | Err;
 
-/** 將 1..20 轉中文數字（章節用） */
+/* ---------- 小工具：1..20 轉中文數字（章節用） ---------- */
 function toZhNum(n: number): string {
   const base = ['零','一','二','三','四','五','六','七','八','九','十'];
   if (n <= 10) return base[n];
@@ -17,28 +17,22 @@ function toZhNum(n: number): string {
   return base[Math.floor(n / 10)] + '十' + base[n % 10];
 }
 
-/** 將「— / – / • 標題」行正規化為章節標題（中文→一、；英文→1.）
- * - 不會動到一般 "- 子彈點"
- * - 已經是「一、 / 1. / I.」的標題會原樣保留
- */
+/* ---------- – / — / • 開頭行，升級為章節標題；保留既有「一、 / 1. / I.」 ---------- */
 function normalizeHeaders(text: string, language: string): string {
   const lines = text.split(/\r?\n/);
   const out: string[] = [];
   let sec = 0;
 
-  const okHeader = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\. )|(?:\d+\. ))/;
+  const okHeader = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\. )|(?:\d+\. ))/;
 
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) { out.push(''); continue; }
 
-    // 原本就以 "- " 開頭的子彈，不變
-    if (/^- /.test(line)) { out.push(line); continue; }
+    if (/^- /.test(line)) { out.push(line); continue; } // 子彈點
 
-    // 已是可辨識標題，保留
     if (okHeader.test(line + ' ')) { out.push(line); continue; }
 
-    // 「— / – / • 」開頭 → 升級為編號標題
     const m = line.match(/^[—–•]\s*(.+)$/);
     if (m && m[1]) {
       sec += 1;
@@ -47,110 +41,142 @@ function normalizeHeaders(text: string, language: string): string {
       out.push(isZH ? `${toZhNum(sec)}、 ${title}` : `${sec}. ${title}`);
       continue;
     }
-
     out.push(line);
   }
-
   return out.join('\n');
 }
 
-/* ================== 將章節標題正規化：引言 / 主體段N / 結論 ================== */
-function normalizeSectionTitles(raw: string, language: string) {
+/* ---------- 固定章節命名：引言 / 主體段N / 結論（可接自訂 body 標題） ---------- */
+type ParagraphPlan = {
+  intro?: number;
+  conclusion?: number;
+  bodyCount?: number;
+  body?: number[];
+  bodyTitles?: string[];
+};
+
+/* ---------- 固定章節命名：只顯示「引言／主體段N／結論」，不接自訂標題 ---------- */
+function normalizeSectionTitles(
+  raw: string,
+  language: string,
+  _plan?: ParagraphPlan  // 故意保留參數，內部不使用
+) {
   const isZH = /中|中文|zh/i.test(String(language));
   const lines = raw.split(/\r?\n/);
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
 
-  // 章節行（行首必帶章節編號）
-  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\.)|(?:\d+\.))\s*(.+)$/;
-
-  // 找出所有章節行索引
   const headerIdxs: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (headerRe.test(lines[i])) headerIdxs.push(i);
   }
   if (headerIdxs.length === 0) return raw;
 
-  const count = headerIdxs.length;
+  let bodySeen = 0;
 
   headerIdxs.forEach((idx, k) => {
     const m = lines[idx].match(headerRe)!;
-    const marker = m[1]; // ex: 「一、」 / 「1.」 / 「I.」
-    let title: string;
+    const marker = m[1];
 
-    if (count === 1) {
-      title = isZH ? '引言' : 'Introduction';
+    let fixed = '';
+    if (headerIdxs.length === 1) {
+      fixed = isZH ? '引言' : 'Introduction';
     } else if (k === 0) {
-      title = isZH ? '引言' : 'Introduction';
-    } else if (k === count - 1) {
-      title = isZH ? '結論' : 'Conclusion';
+      fixed = isZH ? '引言' : 'Introduction';
+    } else if (k === headerIdxs.length - 1) {
+      fixed = isZH ? '結論' : 'Conclusion';
     } else {
-      const n = k; // 主體段從 1 開始
-      title = isZH ? `主體段${toZhNum(n)}` : `Body Paragraph ${n}`;
+      bodySeen += 1;
+      fixed = isZH ? `主體段${toZhNum(bodySeen)}` : `Body Paragraph ${bodySeen}`;
     }
 
-    // 覆寫整行為「編號 + 固定標題」，不動後續內容（子彈點、> 說明… 都在後面行）
-    lines[idx] = `${marker} ${title}`;
+    lines[idx] = `${marker} ${fixed}`;
   });
 
   return lines.join('\n');
 }
 
-/* ================== 小工具：在標題後面加「建議字數」 ================== */
-/**
- * 規則：
- * - 偵測章節標題行（中文一、二…；阿拉伯 1. 2.…；羅馬 I. II.…）
- * - 若 >=3 節：Intro 14%、Conclusion 14%，其餘 Body 平分 72%
- * - 若 2 節：40% / 60%
- * - 其餘：平均分配
- * - 中文顯示「（約 N 字）」；英文顯示「 (≈ N words)」
- */
-function appendWordBudgets(raw: string, language: string, total: number) {
+/* ---------- 在標題後面加「建議字數」：優先用 paragraphPlan ---------- */
+function appendWordBudgets(
+  raw: string,
+  language: string,
+  total: number,
+  plan?: ParagraphPlan
+) {
   const lines = raw.split(/\r?\n/);
-
-  // 抓章節標題（行首）
-  const headerRegex = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\.)|(?:\d+\.))\s*(.+)$/;
-  const headers: { idx: number; marker: string; title: string }[] = [];
+  const headerRegex = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
+  const headers: { idx: number; title: string }[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(headerRegex);
-    if (m) {
-      const marker = m[1];
-      const title = m[2].trim();
-      headers.push({ idx: i, marker, title });
-    }
+    if (m) headers.push({ idx: i, title: m[2].trim() });
   }
-
   if (headers.length === 0) return raw;
 
   const isZH = /中|中文|zh/i.test(language);
 
-  // 找出 intro / conclusion（若沒寫明，預設第一個 / 最後一個）
-  const introIdx =
-    headers.find(h => /引言|前言|introduction/i.test(h.title))?.idx ?? headers[0].idx;
-  const conclusionIdx =
-    headers.find(h => /結論|總結|結語|conclusion/i.test(h.title))?.idx ?? headers[headers.length - 1].idx;
+  // 先建立空 weights/budgets
+  let budgets = new Array(headers.length).fill(0);
 
-  // 配權重
-  const weights: number[] = new Array(headers.length).fill(0);
-  if (headers.length >= 3) {
-    const introW = 0.14;
-    const conclW = 0.14;
-    const remain = 1 - introW - conclW;
-    const bodyCount = headers.length - 2;
+  const introPos =
+    headers.findIndex(h => /引言|前言|introduction/i.test(h.title)) >= 0
+      ? headers.findIndex(h => /引言|前言|introduction/i.test(h.title))
+      : 0;
+  const conclPos =
+    headers.findIndex(h => /結論|總結|結語|conclusion/i.test(h.title)) >= 0
+      ? headers.findIndex(h => /結論|總結|結語|conclusion/i.test(h.title))
+      : headers.length - 1;
+
+  // ★ 優先：paragraphPlan
+  if (plan && total > 0) {
+    const bodySlots: number[] = [];
     for (let i = 0; i < headers.length; i++) {
-      if (i === headers.findIndex(h => h.idx === introIdx)) weights[i] = introW;
-      else if (i === headers.findIndex(h => h.idx === conclusionIdx)) weights[i] = conclW;
-      else weights[i] = remain / bodyCount;
+      if (i !== introPos && i !== conclPos) bodySlots.push(i);
     }
-  } else if (headers.length === 2) {
-    weights[0] = 0.4;
-    weights[1] = 0.6;
+
+    // intro/conclusion
+    if (headers.length === 1) {
+      budgets[0] = plan.intro ?? total;
+    } else if (headers.length === 2) {
+      budgets[introPos] = plan.intro ?? Math.round(total * 0.4);
+      budgets[conclPos] = plan.conclusion ?? Math.round(total * 0.6);
+    } else {
+      budgets[introPos] = plan.intro ?? Math.round(total * 0.14);
+      budgets[conclPos] = plan.conclusion ?? Math.round(total * 0.14);
+      const bodyTotal = Math.max(0, total - budgets[introPos] - budgets[conclPos]);
+      const desired = plan.body && plan.body.length ? plan.body.slice(0, bodySlots.length) : [];
+      if (desired.length === bodySlots.length) {
+        desired.forEach((v, i) => (budgets[bodySlots[i]] = v));
+        // 若總和與 total 有落差，下面會矯正
+      } else {
+        const per = bodySlots.length ? Math.round(bodyTotal / bodySlots.length) : 0;
+        bodySlots.forEach((pos) => (budgets[pos] = per));
+      }
+    }
   } else {
-    weights[0] = 1;
+    // 備援：14/72/14 + 均分
+    const weights: number[] = new Array(headers.length).fill(0);
+    if (headers.length >= 3) {
+      const introW = 0.14, conclW = 0.14;
+      const remain = 1 - introW - conclW;
+      const bodyCount = headers.length - 2;
+      for (let i = 0; i < headers.length; i++) {
+        if (i === introPos) weights[i] = introW;
+        else if (i === conclPos) weights[i] = conclW;
+        else weights[i] = remain / bodyCount;
+      }
+    } else if (headers.length === 2) {
+      weights[introPos] = 0.4;
+      weights[conclPos] = 0.6;
+    } else {
+      weights[0] = 1;
+    }
+    budgets = weights.map(w => Math.max(50, Math.round((total * w) / 10) * 10));
   }
 
-  // 轉成實際字數（四捨五入到 10）
-  let budgets = weights.map(w => Math.max(50, Math.round((total * w) / 10) * 10));
-  // 微調總和差距
+  // 四捨五入到 10、最低 50 字
+  budgets = budgets.map(b => Math.max(50, Math.round(b / 10) * 10));
+
+  // 矯正總和差距
   const diff = total - budgets.reduce((a, b) => a + b, 0);
   if (diff !== 0) {
     const sign = diff > 0 ? 1 : -1;
@@ -160,14 +186,13 @@ function appendWordBudgets(raw: string, language: string, total: number) {
     }
   }
 
-  // 套到每個標題行（先移除舊的括號字數，避免重覆）
+  // 去除舊的括號標示再加新尾註
   const cleanTail = isZH
     ? /\s*（約\s*\d+\s*字）\s*$/
     : /\s*\(≈\s*\d+\s*words\)\s*$/i;
 
   headers.forEach((h, idx) => {
-    const budget = budgets[idx];
-    const suffix = isZH ? `（約 ${budget} 字）` : ` (≈ ${budget} words)`;
+    const suffix = isZH ? `（約 ${budgets[idx]} 字）` : ` (≈ ${budgets[idx]} words)`;
     const original = lines[h.idx].replace(cleanTail, '');
     lines[h.idx] = `${original}${suffix}`;
   });
@@ -183,7 +208,6 @@ export default async function handler(
     return res.status(405).json({ error: '只接受 POST' });
   }
 
-  // 驗證登入（避免匿名亂刷）
   const session = await getAuthSession(req, res);
   if (!session?.user?.id) {
     return res.status(401).json({ error: '未登入' });
@@ -198,6 +222,7 @@ export default async function handler(
     reference = '',
     rubric = '',
     paragraph = '',
+    paragraphPlan, // ★ 新增：前端傳來的段落規劃
     mode = 'gemini-flash',
   } = (req.body ?? {}) as Record<string, any>;
 
@@ -211,7 +236,19 @@ export default async function handler(
     return res.status(400).json({ error: '缺少必要字段' });
   }
 
-  // —— 提示詞（保留你的二級要點規則 + 每節最後 > 說明）——
+  // —— 提示詞（保留二級要點規則 + 每節最後 > 說明）——
+  const planHint = (() => {
+    if (!paragraphPlan) return '';
+    const bCount = Number(paragraphPlan.bodyCount) || (Array.isArray(paragraphPlan.body) ? paragraphPlan.body.length : 0);
+    return `
+【段落規劃（硬性要求）】
+- 引言：${paragraphPlan.intro ?? '依比例'} 字
+- 主體段數：${bCount} 段（依序寫出）
+- 主體各段字數：${Array.isArray(paragraphPlan.body) ? paragraphPlan.body.join('、') : '依比例'} 字
+- 結論：${paragraphPlan.conclusion ?? '依比例'} 字
+`.trim();
+  })();
+
   const prompt = `
 請產生「段落式大綱」，**務必**照以下規則：
 1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
@@ -228,6 +265,7 @@ export default async function handler(
 引用：${reference}
 評分準則：${rubric}
 段落要求：${paragraph || '依內容合理規劃'} 段
+${planHint ? '\n' + planHint : ''}
 
 【中文輸出範例】
 一、 引言
@@ -270,37 +308,34 @@ export default async function handler(
       console.error('[outline:first-call]', { mode, err: msg });
       return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
     }
-    // fallback to GPT-3.5（保留你的行為）
-    const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
-    modelUsed = opt2.model;
-    outline = await callLLM(
-      [{ role: 'user', content: prompt }],
-      { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
-    );
+    try {
+      const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
+      modelUsed = opt2.model;
+      outline = await callLLM(
+        [{ role: 'user', content: prompt }],
+        { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
+      );
+    } catch (e2: any) {
+      console.error('[outline:fallback]', { mode, err: String(e2?.message ?? e2) });
+      return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
+    }
   }
 
-  // --- 後處理流程：先正規化標題 → 行首整理 → 固定標題命名 → 加「（約 N 字）」 ---
+  // --- 後處理：先升級/清理標題 → 固定命名 → 加建議字數 ---
   outline = normalizeHeaders(outline, String(language || '中文'));
 
   outline = outline
-    // 中文數字或羅馬/阿拉伯章節號 → 保留行首
-    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDM]+\.)\s*/g, '$1$2 ')
-    // 子編號 A. B. C. 行首
+    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDMivxlcdm]+\.)\s*/g, '$1$2 ')
     .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
-    // 合併多餘空行
     .replace(/\n{2,}/g, '\n')
     .trim();
 
-  // 固定標題名稱（引言 / 主體段N / 結論）
-  outline = normalizeSectionTitles(outline, String(language || '中文'));
+  outline = normalizeSectionTitles(outline, String(language || '中文'), paragraphPlan);
+  outline = appendWordBudgets(outline, language, wc, paragraphPlan);
 
-  // 在標題後加入建議字數
-  outline = appendWordBudgets(outline, language, wc);
-
-  // 防守：避免超長
   const finalOutline = outline.slice(0, 100_000);
 
-  // --- 落庫到 Outline ---
+  // --- 落庫 ---
   try {
     const rec = await prisma.outline.create({
       data: {
@@ -319,4 +354,3 @@ export default async function handler(
     return res.status(500).json({ error: '資料庫錯誤，請稍後再試' });
   }
 }
-
