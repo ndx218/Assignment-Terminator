@@ -330,7 +330,7 @@ export default function EasyWorkUI() {
             onClick={() =>
               callStep("draft", "/api/draft", {
                 ...form,
-                outline: results.outline,
+                outline: results.outline, outlineId 
               })
             }
           />
