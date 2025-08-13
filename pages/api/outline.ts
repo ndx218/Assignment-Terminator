@@ -17,6 +17,8 @@ function toZhNum(n: number): string {
   return base[Math.floor(n / 10)] + '十' + base[n % 10];
 }
 
+const HEADER_RE = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
+
 /* ---------- – / — / • 開頭行，升級為章節標題；保留既有「一、 / 1. / I.」 ---------- */
 function normalizeHeaders(text: string, language: string): string {
   const lines = text.split(/\r?\n/);
@@ -46,58 +48,176 @@ function normalizeHeaders(text: string, language: string): string {
   return out.join('\n');
 }
 
-/* ---------- 保障章節數量與結構：補齊主體段與結論 ---------- */
-function ensureMinSections(
-  raw: string,
-  language: string,
-  desiredBodies: number // 例如 3
-): string {
-  const isZH = /中|中文|zh/i.test(String(language));
-  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
+/* ---------- 章節解析 ---------- */
+type Section = { marker: string; title: string; body: string[] };
+function parseSections(text: string): { sections: Section[]; isZH: boolean } {
+  const lines = text.split(/\r?\n/);
+  const sections: Section[] = [];
+  let cur: Section | null = null;
 
-  const lines = raw.split(/\r?\n/);
-  type Sec = { title: string; content: string[] };
-  const secs: Sec[] = [];
-  let cur: Sec | null = null;
-
-  const pushCur = () => { if (cur) { cur.content = cur.content.map(s => s.trimEnd()); secs.push(cur); } };
+  const isZH = /[一二三四五六七八九十]+、/.test(text.split('\n')[0] || '');
 
   for (const ln of lines) {
-    const m = ln.match(headerRe);
+    const m = ln.match(HEADER_RE);
     if (m) {
-      pushCur();
-      cur = { title: m[2].trim(), content: [] };
+      if (cur) sections.push(cur);
+      cur = { marker: m[1], title: m[2].trim(), body: [] };
     } else {
-      if (!cur) cur = { title: isZH ? '引言' : 'Introduction', content: [] };
-      cur!.content.push(ln);
+      if (!cur) cur = { marker: isZH ? '一、' : '1.', title: isZH ? '引言' : 'Introduction', body: [] };
+      cur.body.push(ln);
     }
   }
-  pushCur();
+  if (cur) sections.push(cur);
+  return { sections, isZH };
+}
+
+/* ---------- 重建文本（依語言重新編號） ---------- */
+function rebuild(sections: Section[], isZH: boolean): string {
+  const out: string[] = [];
+  for (let i = 0; i < sections.length; i++) {
+    const marker = isZH ? `${toZhNum(i + 1)}、` : `${i + 1}.`;
+    out.push(`${marker} ${sections[i].title}`);
+    out.push(...sections[i].body);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* ---------- 保障最少結構（不足時補主體與結論） ---------- */
+function ensureMinSections(raw: string, language: string, desiredBodies: number): string {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const { sections } = parseSections(raw);
 
   const needBodies = Math.max(1, Number.isFinite(desiredBodies) ? desiredBodies : 3);
   const targetCount = needBodies + 2; // Intro + bodies + Conclusion
 
-  if (secs.length >= 3) {
-    // 夠用就不硬補
-  } else if (secs.length === 2) {
-    while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
-    secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
+  if (sections.length >= 3) return raw;
+
+  const secs = [...sections];
+  if (secs.length === 2) {
+    while (secs.length < targetCount - 1)
+      secs.push({ marker: '', title: '（主體待補）', body: ['- （請補充要點）'] });
+    secs.push({ marker: '', title: isZH ? '結論' : 'Conclusion', body: ['- （總結與展望）'] });
   } else if (secs.length === 1) {
-    while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
-    secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
+    while (secs.length < targetCount - 1)
+      secs.push({ marker: '', title: '（主體待補）', body: ['- （請補充要點）'] });
+    secs.push({ marker: '', title: isZH ? '結論' : 'Conclusion', body: ['- （總結與展望）'] });
   }
 
-  // 重新依語言編號（中文/阿拉伯）
-  const rebuilt: string[] = [];
-  for (let i = 0; i < secs.length; i++) {
-    const marker = isZH ? `${toZhNum(i + 1)}、` : `${i + 1}.`;
-    rebuilt.push(`${marker} ${secs[i].title}`);
-    rebuilt.push(...secs[i].content);
-  }
-  return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // 視語言重新編號
+  return rebuild(secs, isZH);
 }
 
 /* ---------- 固定章節命名：引言 / 主體段N / 結論（不接自訂標題） ---------- */
+function normalizeSectionTitles(raw: string, language: string) {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const { sections } = parseSections(raw);
+
+  const fixed: Section[] = [];
+  let bodySeen = 0;
+
+  for (let k = 0; k < sections.length; k++) {
+    let title = '';
+    if (sections.length === 1) {
+      title = isZH ? '引言' : 'Introduction';
+    } else if (k === 0) {
+      title = isZH ? '引言' : 'Introduction';
+    } else if (k === sections.length - 1) {
+      title = isZH ? '結論' : 'Conclusion';
+    } else {
+      bodySeen += 1;
+      title = isZH ? `主體段${toZhNum(bodySeen)}` : `Body Paragraph ${bodySeen}`;
+    }
+    fixed.push({ marker: sections[k].marker, title, body: sections[k].body });
+  }
+
+  return rebuild(fixed, isZH);
+}
+
+/* ---------- 裁掉多餘的主體段（若 LLM 生太多） ---------- */
+function clipBodiesTo(raw: string, language: string, desiredBodies: number): string {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const { sections } = parseSections(raw);
+  if (sections.length < 3) return raw;
+
+  const intro = sections[0];
+  const bodies = sections.slice(1, sections.length - 1);
+  const concl = sections[sections.length - 1];
+
+  const keepN = Math.max(1, desiredBodies);
+  if (bodies.length <= keepN) return raw;
+
+  const kept = bodies.slice(0, keepN);
+  const extra = bodies.slice(keepN);
+
+  // 將多餘主體段內容併入最後一個保留的主體段（保留其末尾的 > 說明： 在最後）
+  if (extra.length) {
+    const last = kept[kept.length - 1];
+    const explainIdx = last.body.findIndex(l => /^> 說明：/.test((l || '').trim()));
+    const explainLine = explainIdx >= 0 ? last.body.splice(explainIdx, 1)[0] : null;
+
+    for (const sec of extra) {
+      const pure = sec.body.filter(Boolean).filter(l => !/^> 說明：/.test(l.trim()));
+      if (pure.length) {
+        if (last.body.length && last.body[last.body.length - 1].trim() !== '') last.body.push('');
+        last.body.push(...pure);
+      }
+    }
+    if (explainLine) last.body.push(explainLine);
+  }
+
+  return rebuild([intro, ...kept, concl], isZH);
+}
+
+/* ---------- 清洗子彈：去重、限長、保留 3–5 條，保留 > 說明 ---------- */
+function sanitizeAllBullets(raw: string, language: string): string {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const { sections } = parseSections(raw);
+
+  const norm = (s: string) =>
+    s.replace(/^[-•]\s+/, '').replace(/[，。,.!？?；;：:\s]+$/g, '').toLowerCase();
+
+  const MAX_LEN = isZH ? 60 : 120;       // 每條子彈最大字數
+  const MIN_LEN = isZH ? 6 : 8;          // 最小字數
+  const MAX_BULLETS = 5;                 // 每段最多保留 5 條
+  const MIN_BULLETS = 3;                 // 每段至少 3 條（不足稍後由 backfill 來補）
+
+  for (const sec of sections) {
+    const explain = sec.body.filter(l => /^> 說明：/.test((l || '').trim()));
+    let bullets = sec.body
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(s => /^[-•]\s+/.test(s))
+      .map(s => {
+        const core = norm(s);
+        return { raw: s.startsWith('- ') ? s : `- ${s.replace(/^[-•]\s+/, '')}`, core };
+      })
+      .filter(x => x.core.length >= MIN_LEN && x.core.length <= MAX_LEN);
+
+    // 去重（以 core 文本）
+    const seen = new Set<string>();
+    bullets = bullets.filter(x => {
+      if (seen.has(x.core)) return false;
+      seen.add(x.core);
+      return true;
+    });
+
+    // 限量
+    if (bullets.length > MAX_BULLETS) bullets = bullets.slice(0, MAX_BULLETS);
+
+    if (bullets.length === 0) {
+      sec.body = ['- （請補充要點）', ...explain];
+    } else {
+      sec.body = [...bullets.map(b => b.raw)];
+      // 保留段尾說明
+      if (explain.length) sec.body.push(explain[0]);
+      // 若不足 MIN_BULLETS，交給 backfill 再補
+    }
+  }
+
+  return rebuild(sections, isZH);
+}
+
+/* ---------- 在標題後面加「建議字數」：優先用 paragraphPlan ---------- */
 type ParagraphPlan = {
   intro?: number;
   conclusion?: number;
@@ -106,64 +226,16 @@ type ParagraphPlan = {
   bodyTitles?: string[];
 };
 
-function normalizeSectionTitles(
-  raw: string,
-  language: string,
-  _plan?: ParagraphPlan
-) {
-  const isZH = /中|中文|zh/i.test(String(language));
+function appendWordBudgets(raw: string, language: string, total: number, plan?: ParagraphPlan) {
   const lines = raw.split(/\r?\n/);
-  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
-
-  const headerIdxs: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (headerRe.test(lines[i])) headerIdxs.push(i);
-  }
-  if (headerIdxs.length === 0) return raw;
-
-  let bodySeen = 0;
-
-  headerIdxs.forEach((idx, k) => {
-    const m = lines[idx].match(headerRe)!;
-    const marker = m[1];
-
-    let fixed = '';
-    if (headerIdxs.length === 1) {
-      fixed = isZH ? '引言' : 'Introduction';
-    } else if (k === 0) {
-      fixed = isZH ? '引言' : 'Introduction';
-    } else if (k === headerIdxs.length - 1) {
-      fixed = isZH ? '結論' : 'Conclusion';
-    } else {
-      bodySeen += 1;
-      fixed = isZH ? `主體段${toZhNum(bodySeen)}` : `Body Paragraph ${bodySeen}`;
-    }
-
-    lines[idx] = `${marker} ${fixed}`;
-  });
-
-  return lines.join('\n');
-}
-
-/* ---------- 在標題後面加「建議字數」：優先用 paragraphPlan ---------- */
-function appendWordBudgets(
-  raw: string,
-  language: string,
-  total: number,
-  plan?: ParagraphPlan
-) {
-  const lines = raw.split(/\r?\n/);
-  const headerRegex = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
   const headers: { idx: number; title: string }[] = [];
-
   for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(headerRegex);
+    const m = lines[i].match(HEADER_RE);
     if (m) headers.push({ idx: i, title: m[2].trim() });
   }
   if (headers.length === 0) return raw;
 
   const isZH = /中|中文|zh/i.test(language);
-
   let budgets = new Array(headers.length).fill(0);
 
   const introPos =
@@ -177,9 +249,7 @@ function appendWordBudgets(
 
   if (plan && total > 0) {
     const bodySlots: number[] = [];
-    for (let i = 0; i < headers.length; i++) {
-      if (i !== introPos && i !== conclPos) bodySlots.push(i);
-    }
+    for (let i = 0; i < headers.length; i++) if (i !== introPos && i !== conclPos) bodySlots.push(i);
 
     if (headers.length === 1) {
       budgets[0] = plan.intro ?? total;
@@ -199,7 +269,6 @@ function appendWordBudgets(
       }
     }
   } else {
-    // 備援比例：14% / 均分 72% / 14%
     const weights: number[] = new Array(headers.length).fill(0);
     if (headers.length >= 3) {
       const introW = 0.14, conclW = 0.14;
@@ -222,7 +291,7 @@ function appendWordBudgets(
   // 最低 50、四捨五入到 10
   budgets = budgets.map(b => Math.max(50, Math.round(b / 10) * 10));
 
-  // 矯正總和差距
+  // 矯正總和差距（保證剛好等於 total）
   const diff = total - budgets.reduce((a, b) => a + b, 0);
   if (diff !== 0) {
     const sign = diff > 0 ? 1 : -1;
@@ -232,9 +301,7 @@ function appendWordBudgets(
     }
   }
 
-  const cleanTail = isZH
-    ? /\s*（約\s*\d+\s*字）\s*$/
-    : /\s*\(≈\s*\d+\s*words\)\s*$/i;
+  const cleanTail = isZH ? /\s*（約\s*\d+\s*字）\s*$/ : /\s*\(≈\s*\d+\s*words\)\s*$/i;
 
   headers.forEach((h, idx) => {
     const suffix = isZH ? `（約 ${budgets[idx]} 字）` : ` (≈ ${budgets[idx]} words)`;
@@ -245,22 +312,7 @@ function appendWordBudgets(
   return lines.join('\n');
 }
 
-/* ================== 章節解析與缺內容回填（自動補子彈） ================== */
-function parseSections(text: string) {
-  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
-  const lines = text.split(/\r?\n/);
-  const idxs: number[] = [];
-  for (let i = 0; i < lines.length; i++) if (headerRe.test(lines[i])) idxs.push(i);
-  const secs = idxs.map((start, i) => {
-    const end = i + 1 < idxs.length ? idxs[i + 1] : lines.length;
-    const header = lines[start];
-    const body = lines.slice(start + 1, end);
-    const m = header.match(headerRe)!;
-    return { start, end, header, title: m[2].trim(), body };
-  });
-  return { lines, secs, headerRe };
-}
-
+/* ---------- 判斷是否缺內容 ---------- */
 function isMissingBody(bodyLines: string[]) {
   const clean = bodyLines.map(s => s.trim()).filter(Boolean);
   if (clean.length === 0) return true;
@@ -271,16 +323,18 @@ function isMissingBody(bodyLines: string[]) {
   return onlyPlaceholders || !hasBullet;
 }
 
+/* ---------- 缺內容就用小 prompt 補 3–5 條 `- ` 子彈 ---------- */
 async function backfillMissingBullets(
   outline: string,
   ctx: { title: string; language: string; tone: string; detail?: string; reference?: string },
   llmOpt: { model: string; temperature?: number; timeoutMs?: number; title?: string; referer?: string }
 ) {
-  const { lines, secs } = parseSections(outline);
-  const missing = secs.filter(s => isMissingBody(s.body));
-  if (missing.length === 0) return outline;
+  const { sections, isZH } = parseSections(outline);
+  let changed = false;
 
-  for (const sec of missing) {
+  for (const sec of sections) {
+    if (!isMissingBody(sec.body)) continue;
+
     const prompt = `
 請用「${ctx.language}」為主題《${ctx.title}》中的章節「${sec.title}」補出 3–5 條要點：
 - 直接輸出每行以「- 」開頭的子彈點
@@ -298,27 +352,23 @@ async function backfillMissingBullets(
         title: 'Outline Backfill',
       });
     } catch {
-      continue; // 忽略失敗，保留佔位
+      continue;
     }
 
     const cleaned = String(bullets || '')
       .split(/\r?\n/)
       .map(s => s.trim())
       .filter(Boolean)
-      .map(s => (s.startsWith('- ') ? s : `- ${s}`));
+      .map(s => (s.startsWith('- ') ? s : `- ${s.replace(/^[-•]\s+/, '')}`))
+      .slice(0, 5);
 
-    // 找最後一條「> 說明：」
-    let explain: string | null = null;
-    for (let i = sec.body.length - 1; i >= 0; i--) {
-      const t = sec.body[i]?.trim();
-      if (t && /^> 說明：/.test(t)) { explain = sec.body[i]; break; }
-    }
-
-    const newBody = [...cleaned.slice(0, 5), ...(explain ? [explain] : [])];
-    lines.splice(sec.start + 1, sec.end - (sec.start + 1), ...newBody);
+    // 保留段尾的 > 說明（如果有）
+    const explain = sec.body.find(l => /^> 說明：/.test((l || '').trim()));
+    sec.body = [...(cleaned.length ? cleaned : ['- （請補充要點）']), ...(explain ? [explain] : [])];
+    changed = true;
   }
 
-  return lines.join('\n');
+  return changed ? rebuild(sections, isZH) : outline;
 }
 
 /* ================== Handler ================== */
@@ -445,9 +495,8 @@ ${planHint ? '\n' + planHint : ''}
     }
   }
 
-  // --- 後處理：升級/清理標題 → 補齊章節 → 固定命名 → 加建議字數 → 回填缺內容 ---
+  // --- 後處理：升級/清理標題 ---
   outline = normalizeHeaders(outline, String(language || '中文'));
-
   outline = outline
     .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDMivxlcdm]+\.)\s*/g, '$1$2 ')
     .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
@@ -459,11 +508,13 @@ ${planHint ? '\n' + planHint : ''}
     Number((req.body as any)?.paragraphPlan?.bodyCount) ||
     (Number.isFinite(parseInt(String(paragraph), 10)) ? parseInt(String(paragraph), 10) : 3);
 
+  // 保障最少 → 固定命名 → 裁掉多餘 → 清洗子彈
   outline = ensureMinSections(outline, String(language || '中文'), desiredBodyCount);
-  outline = normalizeSectionTitles(outline, String(language || '中文'), paragraphPlan);
-  outline = appendWordBudgets(outline, language, wc, paragraphPlan);
+  outline = normalizeSectionTitles(outline, String(language || '中文'));
+  outline = clipBodiesTo(outline, String(language || '中文'), desiredBodyCount);
+  outline = sanitizeAllBullets(outline, String(language || '中文'));
 
-  // ★ 自動回填缺內容的章節（補 3–5 條要點）
+  // 缺內容就回填 3–5 條子彈
   try {
     const optForBackfill = mapMode('outline' as StepName, mode);
     outline = await backfillMissingBullets(
@@ -472,8 +523,11 @@ ${planHint ? '\n' + planHint : ''}
       optForBackfill
     );
   } catch {
-    // 忽略回填失敗，保留現況
+    // 忽略回填失敗
   }
+
+  // ★ 最後一步：分配章節字數（此時結構已定型）
+  outline = appendWordBudgets(outline, language, wc, paragraphPlan);
 
   const finalOutline = outline.slice(0, 100_000);
 
