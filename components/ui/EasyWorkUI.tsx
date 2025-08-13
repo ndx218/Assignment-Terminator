@@ -1,7 +1,7 @@
 /* components/ui/EasyWorkUI.tsx – TS 5.x + Next 13.4 */
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { ReferencesPanel } from "@/components/ui/ReferencesPanel";
 import { MODE_COST, getCost, type StepName } from "@/lib/points";
 import { useCredits, useSpend, useSetCredits } from "@/hooks/usePointStore";
+import ParagraphPlanner, { ParagraphPlan } from "@/components/ui/ParagraphPlanner";
 
 import {
   Dialog, DialogTrigger, DialogContent,
@@ -67,9 +68,9 @@ type Citation = {
 export function formatCitationAPA7(r: Citation) {
   const year = r.publishedAt
     ? (typeof r.publishedAt === "string"
-        ? r.publishedAt.slice(0, 4) // 第66行
-        : String((r.publishedAt as Date).getFullYear())) // 第67行
-    : "n.d.";  // 如果 `publishedAt` 沒有提供，就顯示 "n.d."
+        ? r.publishedAt.slice(0, 4)
+        : String((r.publishedAt as Date).getFullYear()))
+    : "n.d.";
   
   const authors = r.authors ? r.authors + ". " : "";
   const title = r.title ? `${r.title}.` : "";
@@ -80,7 +81,9 @@ export function formatCitationAPA7(r: Citation) {
     ? ` ${r.url}`
     : "";
   
-  return `${authors}(${year}). ${title}${source}${tail}`.replace(/\s+/g, " ").trim();
+  return `${authors}(${year}). ${r.title ? `${r.title}.` : ""}${source}${tail}`
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 
@@ -92,18 +95,26 @@ function parseOutlineToSections(outline: string): OutlineSection[] {
   const lines = outline.split(/\r?\n/).map((l) => l.trim());
   const sections: OutlineSection[] = [];
 
-  const isHeader = (s: string) =>
-    /^([一二三四五六七八九十]+、|[0-9]+\.)/.test(s);
+  // 支援：中文一、二…；阿拉伯 1.；羅馬 I. V. …（大小寫）
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:\d+\.)|(?:[IVXLCDMivxlcdm]+\.) )\s*(.+)$/;
 
   let current: OutlineSection | null = null;
 
   for (const line of lines) {
     if (!line) continue;
-    if (isHeader(line)) {
-      const key = line.replace(/[、.].*$/, "").trim(); // 「一」或「1」
-      const title = line.replace(/^([一二三四五六七八九十]+、|[0-9]+\.)\s*/, "").trim();
+
+    const m = line.match(headerRe);
+    if (m) {
+      // 章節 key（去掉標點）
+      const marker = m[1].replace(/[、.]\s*$/, "").trim();
+      // 標題：去掉（約 123 字）或 (≈ 123 words)
+      const rawTitle = m[2]
+        .replace(/\s*（約\s*\d+\s*字）\s*$/, "")
+        .replace(/\s*\(≈\s*\d+\s*words\)\s*$/i, "")
+        .trim();
+
       if (current) sections.push(current);
-      current = { key, title: title || key, text: "" };
+      current = { key: marker, title: rawTitle || marker, text: "" };
     } else if (current) {
       current.text += (current.text ? "\n" : "") + line;
     }
@@ -133,6 +144,32 @@ export default function EasyWorkUI() {
     rubric: "",
     paragraph: "",
   });
+
+  /* 段落規劃器狀態（預設 3 段主體） */
+  const [plan, setPlan] = useState<ParagraphPlan>({
+    intro: 140,
+    bodyCount: 3,
+    body: [240, 240, 240],
+    conclusion: 140,
+    bodyTitles: ["", "", ""],
+  });
+
+  // 當 wordCount 改變 → 自動按比例分配一次
+  useEffect(() => {
+    const total = parseInt(form.wordCount || "0", 10) || 0;
+    if (!total || plan.bodyCount <= 0) return;
+    const intro = Math.max(50, Math.round(total * 0.14 / 10) * 10);
+    const concl = Math.max(50, Math.round(total * 0.14 / 10) * 10);
+    const remain = Math.max(0, total - intro - concl);
+    const per = Math.max(50, Math.round(remain / plan.bodyCount / 10) * 10);
+    setPlan((p) => ({
+      ...p,
+      intro,
+      conclusion: concl,
+      body: Array.from({ length: p.bodyCount }, () => per),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.wordCount]);
 
   /* ----------- 結果 / 其他 state ----------- */
   const [results, setResults] = useState<Record<string, string>>({});
@@ -307,6 +344,14 @@ export default function EasyWorkUI() {
             onChange={(e) => setForm({ ...form, detail: e.target.value })}
           />
 
+          {/* 🔧 段落規劃器（新） */}
+          <ParagraphPlanner
+            totalWords={parseInt(form.wordCount || "0", 10) || 0}
+            value={plan}
+            onChange={setPlan}
+            language={form.language}
+          />
+
           {/* -------- 各步驟 -------- */}
           <StepBlock
             step="outline"
@@ -316,7 +361,12 @@ export default function EasyWorkUI() {
             setMode={(v) =>
               setMode((m) => ({ ...m, outline: v as ModeState["outline"] }))
             }
-            onClick={() => callStep("outline", "/api/outline", form)}
+            onClick={() =>
+              callStep("outline", "/api/outline", {
+                ...form,
+                paragraphPlan: plan, // ✅ 送到後端
+              })
+            }
           />
 
           <StepBlock
@@ -330,7 +380,8 @@ export default function EasyWorkUI() {
             onClick={() =>
               callStep("draft", "/api/draft", {
                 ...form,
-                outline: results.outline, outlineId 
+                outline: results.outline,
+                outlineId, // 可讓後端關聯（若有用）
               })
             }
           />
@@ -395,29 +446,27 @@ export default function EasyWorkUI() {
                   {key === "outline" ? (
                     <>
                       <div className="mb-2 flex items-center gap-2">
-                        
-                       <Button
-  variant={outlineViewMode === "edit" ? "default" : "outline"}
-  size="sm"
-  onClick={() => setOutlineViewMode("edit")}
->
-  ✏️ 編輯模式
-</Button>
+                        <Button
+                          variant={outlineViewMode === "edit" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setOutlineViewMode("edit")}
+                        >
+                          ✏️ 編輯模式
+                        </Button>
 
-<Button
-  variant={outlineViewMode === "view" ? "default" : "outline"}
-  size="sm"
-  onClick={() => {
-    if (!outlineId || !(results.outline?.trim())) {
-      alert("⚠️ 系統尚未產生大綱資料，請先點擊上方產生參考文獻的大綱模式");
-      return;
-    }
-    setOutlineViewMode("view");
-  }}
->
-  🔍 檢視模式 + 參考文獻
-</Button>
-
+                        <Button
+                          variant={outlineViewMode === "view" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            if (!outlineId || !(results.outline?.trim())) {
+                              alert("⚠️ 系統尚未產生大綱資料，請先點擊上方產生參考文獻的大綱模式");
+                              return;
+                            }
+                            setOutlineViewMode("view");
+                          }}
+                        >
+                          🔍 檢視模式 + 參考文獻
+                        </Button>
                       </div>
 
                       {outlineViewMode === "edit" ? (
@@ -569,7 +618,6 @@ const modeLabel = (m: string) =>
   } as Record<string, string>)[m] ?? m;
 
 /* ======================= 逐條目檢視 + 參考按鈕 ======================= */
-/** 逐段（I/II/III…），每段再以行切子彈（- 或 • 開頭；沒有就整段當一條） */
 function OutlineViewerWithRefs({
   outlineId,
   outlineText,
@@ -621,8 +669,8 @@ function OutlineViewerWithRefs({
     </div>
   );
 }
-/* ======================= 參考文獻「內嵌面板」樣式 ======================= */
-/* ======================= 參考文獻「行內面板」的封裝：ReferenceDialog ======================= */
+
+/* ======================= 參考文獻「行內面板」 ======================= */
 function ReferenceDialog({
   outlineId,
   sectionKey,
@@ -640,46 +688,45 @@ function ReferenceDialog({
   const [cands, setCands] = useState<ReferenceItem[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({}); // url -> checked
 
-async function suggest() {
-  console.log("📦 API 參數確認", { outlineId, sectionKey, text: bulletText });
+  async function suggest() {
+    console.log("📦 API 參數確認", { outlineId, sectionKey, text: bulletText });
 
-  // ✅ 二次防呆，避免 race condition 導致 outlineId 為空
-  if (!outlineId || outlineId.length < 6 || !sectionKey || !bulletText?.trim()) {
-    alert("⚠️ 系統資料尚未準備好，請稍後再嘗試加入參考文獻");
-    return;
+    if (!outlineId || outlineId.length < 6 || !sectionKey || !bulletText?.trim()) {
+      alert("⚠️ 系統資料尚未準備好，請稍後再嘗試加入參考文獻");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const r = await fetch("/api/references/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outlineId, sectionKey, text: bulletText, source: "web" }),
+      }).then((x) => x.json());
+
+      if (r?.error) throw new Error(r.error);
+
+      const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
+        sectionKey,
+        title: it.title,
+        url: it.url,
+        doi: it.doi ?? null,
+        source: it.source ?? null,
+        authors: it.authors ?? null,
+        publishedAt: it.publishedAt ?? null,
+        type: it.type ?? "OTHER",
+        credibility: it.credibility ?? null,
+        summary: it.summary ?? null,
+      }));
+
+      setCands(list);
+      setPicked({});
+    } catch (e: any) {
+      alert("❌ 無法取得參考文獻：" + (e.message || "未知錯誤"));
+    } finally {
+      setBusy(false);
+    }
   }
-
-  setBusy(true);
-  try {
-    const r = await fetch("/api/references/suggest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ outlineId, sectionKey, text: bulletText, source: "web" }),
-    }).then((x) => x.json());
-
-    if (r?.error) throw new Error(r.error);
-
-    const list: ReferenceItem[] = (r?.candidates || []).map((it: any) => ({
-      sectionKey,
-      title: it.title,
-      url: it.url,
-      doi: it.doi ?? null,
-      source: it.source ?? null,
-      authors: it.authors ?? null,
-      publishedAt: it.publishedAt ?? null,
-      type: it.type ?? "OTHER",
-      credibility: it.credibility ?? null,
-      summary: it.summary ?? null,
-    }));
-
-    setCands(list);
-    setPicked({});
-  } catch (e: any) {
-    alert("❌ 無法取得參考文獻：" + (e.message || "未知錯誤"));
-  } finally {
-    setBusy(false);
-  }
-}
 
   async function save() {
     const items = cands.filter((c) => picked[c.url]);
@@ -752,8 +799,8 @@ function ReferenceInlinePanel({
     <div className="mt-2">
       <Button
         variant="outline"
-        size="sm"                 // shadcn 允許的 size
-        className="h-7 px-2 text-xs"  // 視覺縮小
+        size="sm"
+        className="h-7 px-2 text-xs"
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
