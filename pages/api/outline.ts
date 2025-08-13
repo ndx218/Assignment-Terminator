@@ -46,7 +46,60 @@ function normalizeHeaders(text: string, language: string): string {
   return out.join('\n');
 }
 
-/* ---------- 固定章節命名：引言 / 主體段N / 結論（可接自訂 body 標題） ---------- */
+/* ---------- 保障章節數量與結構：補齊主體段與結論 ---------- */
+function ensureMinSections(
+  raw: string,
+  language: string,
+  desiredBodies: number // 例如 3
+): string {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDMivxlcdm]+\.)|(?:\d+\.))\s*(.+)$/;
+
+  const lines = raw.split(/\r?\n/);
+  type Sec = { title: string; content: string[] };
+  const secs: Sec[] = [];
+  let cur: Sec | null = null;
+
+  const pushCur = () => { if (cur) { cur.content = cur.content.map(s => s.trimEnd()); secs.push(cur); } };
+
+  for (const ln of lines) {
+    const m = ln.match(headerRe);
+    if (m) {
+      pushCur();
+      cur = { title: m[2].trim(), content: [] };
+    } else {
+      if (!cur) cur = { title: isZH ? '引言' : 'Introduction', content: [] };
+      cur!.content.push(ln);
+    }
+  }
+  pushCur();
+
+  const needBodies = Math.max(1, Number.isFinite(desiredBodies) ? desiredBodies : 3);
+  const targetCount = needBodies + 2; // Intro + bodies + Conclusion
+
+  if (secs.length >= 3) {
+    // 已經足夠就不硬拆，但仍會在後面固定命名
+  } else if (secs.length === 2) {
+    // 第一節視為引言；第二節視為主體段1；補齊其餘主體段與結論
+    while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
+    secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
+  } else if (secs.length === 1) {
+    // 只有一節（引言），補主體段和結論
+    while (secs.length < targetCount - 1) secs.push({ title: '（主體待補）', content: ['- （請補充要點）'] });
+    secs.push({ title: isZH ? '結論' : 'Conclusion', content: ['- （總結與展望）'] });
+  }
+
+  // 重新依語言編號（中文/阿拉伯）
+  const rebuilt: string[] = [];
+  for (let i = 0; i < secs.length; i++) {
+    const marker = isZH ? `${toZhNum(i + 1)}、` : `${i + 1}.`;
+    rebuilt.push(`${marker} ${secs[i].title}`);
+    rebuilt.push(...secs[i].content);
+  }
+  return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/* ---------- 固定章節命名：引言 / 主體段N / 結論（不接自訂標題） ---------- */
 type ParagraphPlan = {
   intro?: number;
   conclusion?: number;
@@ -55,11 +108,10 @@ type ParagraphPlan = {
   bodyTitles?: string[];
 };
 
-/* ---------- 固定章節命名：只顯示「引言／主體段N／結論」，不接自訂標題 ---------- */
 function normalizeSectionTitles(
   raw: string,
   language: string,
-  _plan?: ParagraphPlan  // 故意保留參數，內部不使用
+  _plan?: ParagraphPlan
 ) {
   const isZH = /中|中文|zh/i.test(String(language));
   const lines = raw.split(/\r?\n/);
@@ -114,7 +166,6 @@ function appendWordBudgets(
 
   const isZH = /中|中文|zh/i.test(language);
 
-  // 先建立空 weights/budgets
   let budgets = new Array(headers.length).fill(0);
 
   const introPos =
@@ -126,14 +177,12 @@ function appendWordBudgets(
       ? headers.findIndex(h => /結論|總結|結語|conclusion/i.test(h.title))
       : headers.length - 1;
 
-  // ★ 優先：paragraphPlan
   if (plan && total > 0) {
     const bodySlots: number[] = [];
     for (let i = 0; i < headers.length; i++) {
       if (i !== introPos && i !== conclPos) bodySlots.push(i);
     }
 
-    // intro/conclusion
     if (headers.length === 1) {
       budgets[0] = plan.intro ?? total;
     } else if (headers.length === 2) {
@@ -146,14 +195,13 @@ function appendWordBudgets(
       const desired = plan.body && plan.body.length ? plan.body.slice(0, bodySlots.length) : [];
       if (desired.length === bodySlots.length) {
         desired.forEach((v, i) => (budgets[bodySlots[i]] = v));
-        // 若總和與 total 有落差，下面會矯正
       } else {
         const per = bodySlots.length ? Math.round(bodyTotal / bodySlots.length) : 0;
         bodySlots.forEach((pos) => (budgets[pos] = per));
       }
     }
   } else {
-    // 備援：14/72/14 + 均分
+    // 備援比例：14% / 均分 72% / 14%
     const weights: number[] = new Array(headers.length).fill(0);
     if (headers.length >= 3) {
       const introW = 0.14, conclW = 0.14;
@@ -173,7 +221,7 @@ function appendWordBudgets(
     budgets = weights.map(w => Math.max(50, Math.round((total * w) / 10) * 10));
   }
 
-  // 四捨五入到 10、最低 50 字
+  // 最低 50、四捨五入到 10
   budgets = budgets.map(b => Math.max(50, Math.round(b / 10) * 10));
 
   // 矯正總和差距
@@ -186,7 +234,6 @@ function appendWordBudgets(
     }
   }
 
-  // 去除舊的括號標示再加新尾註
   const cleanTail = isZH
     ? /\s*（約\s*\d+\s*字）\s*$/
     : /\s*\(≈\s*\d+\s*words\)\s*$/i;
@@ -222,7 +269,7 @@ export default async function handler(
     reference = '',
     rubric = '',
     paragraph = '',
-    paragraphPlan, // ★ 新增：前端傳來的段落規劃
+    paragraphPlan, // 可選：前端段落規劃器
     mode = 'gemini-flash',
   } = (req.body ?? {}) as Record<string, any>;
 
@@ -239,11 +286,13 @@ export default async function handler(
   // —— 提示詞（保留二級要點規則 + 每節最後 > 說明）——
   const planHint = (() => {
     if (!paragraphPlan) return '';
-    const bCount = Number(paragraphPlan.bodyCount) || (Array.isArray(paragraphPlan.body) ? paragraphPlan.body.length : 0);
+    const bCount =
+      Number(paragraphPlan.bodyCount) ||
+      (Array.isArray(paragraphPlan.body) ? paragraphPlan.body.length : 0);
     return `
 【段落規劃（硬性要求）】
 - 引言：${paragraphPlan.intro ?? '依比例'} 字
-- 主體段數：${bCount} 段（依序寫出）
+- 主體段數：${bCount || '依比例'} 段（依序寫出）
 - 主體各段字數：${Array.isArray(paragraphPlan.body) ? paragraphPlan.body.join('、') : '依比例'} 字
 - 結論：${paragraphPlan.conclusion ?? '依比例'} 字
 `.trim();
@@ -321,7 +370,7 @@ ${planHint ? '\n' + planHint : ''}
     }
   }
 
-  // --- 後處理：先升級/清理標題 → 固定命名 → 加建議字數 ---
+  // --- 後處理：升級/清理標題 → 補齊章節 → 固定命名 → 加建議字數 ---
   outline = normalizeHeaders(outline, String(language || '中文'));
 
   outline = outline
@@ -330,6 +379,12 @@ ${planHint ? '\n' + planHint : ''}
     .replace(/\n{2,}/g, '\n')
     .trim();
 
+  // 讀主體段數：優先 paragraphPlan.bodyCount，其次 paragraph（純數字），預設 3
+  const desiredBodyCount =
+    Number((req.body as any)?.paragraphPlan?.bodyCount) ||
+    (Number.isFinite(parseInt(String(paragraph), 10)) ? parseInt(String(paragraph), 10) : 3);
+
+  outline = ensureMinSections(outline, String(language || '中文'), desiredBodyCount);
   outline = normalizeSectionTitles(outline, String(language || '中文'), paragraphPlan);
   outline = appendWordBudgets(outline, language, wc, paragraphPlan);
 
