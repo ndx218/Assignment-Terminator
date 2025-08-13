@@ -54,145 +54,44 @@ function normalizeHeaders(text: string, language: string): string {
   return out.join('\n');
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ResBody>,
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: '只接受 POST' });
+/* ================== 將章節標題正規化：引言 / 主體段N / 結論 ================== */
+function normalizeSectionTitles(raw: string, language: string) {
+  const isZH = /中|中文|zh/i.test(String(language));
+  const lines = raw.split(/\r?\n/);
+
+  // 章節行（行首必帶章節編號）
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\.)|(?:\d+\.))\s*(.+)$/;
+
+  // 找出所有章節行索引
+  const headerIdxs: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (headerRe.test(lines[i])) headerIdxs.push(i);
   }
+  if (headerIdxs.length === 0) return raw;
 
-  // 驗證登入（避免匿名亂刷）
-  const session = await getAuthSession(req, res);
-  if (!session?.user?.id) {
-    return res.status(401).json({ error: '未登入' });
-  }
+  const count = headerIdxs.length;
 
-  const {
-    title,
-    wordCount,
-    language,
-    tone,
-    detail = '',
-    reference = '',
-    rubric = '',
-    paragraph = '',
-    mode = 'gemini-flash',
-  } = (req.body ?? {}) as Record<string, any>;
+  headerIdxs.forEach((idx, k) => {
+    const m = lines[idx].match(headerRe)!;
+    const marker = m[1]; // ex: 「一、」 / 「1.」 / 「I.」
+    let title: string;
 
-  const wc = Number(wordCount);
-  if (
-    typeof title !== 'string' ||
-    typeof language !== 'string' ||
-    typeof tone !== 'string' ||
-    !Number.isFinite(wc)
-  ) {
-    return res.status(400).json({ error: '缺少必要字段' });
-  }
-
-  // —— 你的提示詞（保留你的二級要點規則 + 每節最後 > 說明）——
-  const prompt = `
-請產生「段落式大綱」，**務必**照以下規則：
-1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
-2. 每節標題獨立一行，後面不加任何符號。
-3. 每節下至少 2–4 條「- 主要點」，可視需要在每條主要點下再加 a./b. 子要點（縮排兩空白）。
-4. 每個章節最後加 1 行補充說明，開頭寫 **"> 說明："**（提供脈絡與延伸，不要放連結）。
-5. 不要多餘空行。
-
-【需求】
-題目：${title}
-字數：約 ${wc}
-語言：${language}（語氣：${tone}）
-細節：${detail}
-引用：${reference}
-評分準則：${rubric}
-段落要求：${paragraph || '依內容合理規劃'} 段
-
-【中文輸出範例】
-一、 引言
-- 介紹人工智慧（AI）的概念
-  a. 定義：模擬人類認知的技術
-  b. 關鍵能力：學習、推理、感知
-- 討論 AI 的重要性
-  a. 社會影響：自動化與效率
-  b. 經濟影響：創新與競爭
-> 說明：本段建立主題背景與重要性，為後文鋪陳。
-
-二、 AI 的核心概念
-- 弱 AI vs. 強 AI
-  a. 弱 AI：專注任務，如推薦系統
-  b. 強 AI：通用智慧，仍在研究
-- 機器學習與深度學習
-  a. ML：數據驅動模式識別
-  b. DL：多層神經網路
-> 說明：本段釐清術語與範疇，降低誤解。
-
-請直接輸出大綱內容，不要額外說明。`.trim();
-
-  // --- 呼叫 LLM（含 fallback） ---
-  let outline = '';
-  let modelUsed = '';
-  try {
-    const opt1 = mapMode('outline' as StepName, mode);
-    modelUsed = opt1.model;
-    outline = await callLLM(
-      [{ role: 'user', content: prompt }],
-      { ...opt1, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
-    );
-  } catch (e: any) {
-    const msg = String(e?.message ?? e);
-    const needFallback =
-      /OPENROUTER_HTTP_4\d\d/.test(msg) ||
-      /not a valid model id/i.test(msg) ||
-      /model.*not.*found/i.test(msg);
-    if (!needFallback) {
-      console.error('[outline:first-call]', { mode, err: msg });
-      return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
+    if (count === 1) {
+      title = isZH ? '引言' : 'Introduction';
+    } else if (k === 0) {
+      title = isZH ? '引言' : 'Introduction';
+    } else if (k === count - 1) {
+      title = isZH ? '結論' : 'Conclusion';
+    } else {
+      const n = k; // 主體段從 1 開始
+      title = isZH ? `主體段${toZhNum(n)}` : `Body Paragraph ${n}`;
     }
-    // fallback to GPT-3.5（保留你的行為）
-    const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
-    modelUsed = opt2.model;
-    outline = await callLLM(
-      [{ role: 'user', content: prompt }],
-      { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
-    );
-  }
 
-  // --- 後處理流程：先正規化標題 → 再做你的行首整理 → 最後加「（約 N 字）」 ---
-  outline = normalizeHeaders(outline, String(language || '中文'));
+    // 覆寫整行為「編號 + 固定標題」，不動後續內容（子彈點、> 說明… 都在後面行）
+    lines[idx] = `${marker} ${title}`;
+  });
 
-  outline = outline
-    // 中文數字或羅馬/阿拉伯章節號 → 保留行首
-    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDM]+\.)\s*/g, '$1$2 ')
-    // 子編號 A. B. C. 行首
-    .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
-    // 合併多餘空行
-    .replace(/\n{2,}/g, '\n')
-    .trim();
-
-  outline = appendWordBudgets(outline, language, wc);
-
-  // 防守：避免超長
-  const finalOutline = outline.slice(0, 100_000);
-
-  // --- 落庫到 Outline ---
-  try {
-    const rec = await prisma.outline.create({
-      data: {
-        userId: session.user.id,
-        title: String(title).slice(0, 512),
-        content: finalOutline,
-      },
-      select: { id: true },
-    });
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[outline:ok]', { outlineId: rec.id, modelUsed });
-    }
-    return res.status(200).json({ outline: finalOutline, outlineId: rec.id });
-  } catch (dbErr: any) {
-    console.error('[outline:db]', { err: String(dbErr?.message ?? dbErr) });
-    return res.status(500).json({ error: '資料庫錯誤，請稍後再試' });
-  }
+  return lines.join('\n');
 }
 
 /* ================== 小工具：在標題後面加「建議字數」 ================== */
@@ -275,3 +174,149 @@ function appendWordBudgets(raw: string, language: string, total: number) {
 
   return lines.join('\n');
 }
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<ResBody>,
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: '只接受 POST' });
+  }
+
+  // 驗證登入（避免匿名亂刷）
+  const session = await getAuthSession(req, res);
+  if (!session?.user?.id) {
+    return res.status(401).json({ error: '未登入' });
+  }
+
+  const {
+    title,
+    wordCount,
+    language,
+    tone,
+    detail = '',
+    reference = '',
+    rubric = '',
+    paragraph = '',
+    mode = 'gemini-flash',
+  } = (req.body ?? {}) as Record<string, any>;
+
+  const wc = Number(wordCount);
+  if (
+    typeof title !== 'string' ||
+    typeof language !== 'string' ||
+    typeof tone !== 'string' ||
+    !Number.isFinite(wc)
+  ) {
+    return res.status(400).json({ error: '缺少必要字段' });
+  }
+
+  // —— 提示詞（保留你的二級要點規則 + 每節最後 > 說明）——
+  const prompt = `
+請產生「段落式大綱」，**務必**照以下規則：
+1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
+2. 每節標題獨立一行，後面不加任何符號。
+3. 每節下至少 2–4 條「- 主要點」，可視需要在每條主要點下再加 a./b. 子要點（縮排兩空白）。
+4. 每個章節最後加 1 行補充說明，開頭寫 **"> 說明："**（提供脈絡與延伸，不要放連結）。
+5. 不要多餘空行。
+
+【需求】
+題目：${title}
+字數：約 ${wc}
+語言：${language}（語氣：${tone}）
+細節：${detail}
+引用：${reference}
+評分準則：${rubric}
+段落要求：${paragraph || '依內容合理規劃'} 段
+
+【中文輸出範例】
+一、 引言
+- 介紹人工智慧（AI）的概念
+  a. 定義：模擬人類認知的技術
+  b. 關鍵能力：學習、推理、感知
+- 討論 AI 的重要性
+  a. 社會影響：自動化與效率
+  b. 經濟影響：創新與競爭
+> 說明：本段建立主題背景與重要性，為後文鋪陳。
+
+二、 AI 的核心概念
+- 弱 AI vs. 強 AI
+  a. 弱 AI：專注任務，如推薦系統
+  b. 強 AI：通用智慧，仍在研究
+- 機器學習與深度學習
+  a. ML：數據驅動模式識別
+  b. DL：多層神經網路
+> 說明：本段釐清術語與範疇，降低誤解。
+
+請直接輸出大綱內容，不要額外說明。`.trim();
+
+  // --- 呼叫 LLM（含 fallback） ---
+  let outline = '';
+  let modelUsed = '';
+  try {
+    const opt1 = mapMode('outline' as StepName, mode);
+    modelUsed = opt1.model;
+    outline = await callLLM(
+      [{ role: 'user', content: prompt }],
+      { ...opt1, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
+    );
+  } catch (e: any) {
+    const msg = String(e?.message ?? e);
+    const needFallback =
+      /OPENROUTER_HTTP_4\d\d/.test(msg) ||
+      /not a valid model id/i.test(msg) ||
+      /model.*not.*found/i.test(msg);
+    if (!needFallback) {
+      console.error('[outline:first-call]', { mode, err: msg });
+      return res.status(500).json({ error: 'AI 服務錯誤，請稍後再試' });
+    }
+    // fallback to GPT-3.5（保留你的行為）
+    const opt2 = mapMode('outline' as StepName, 'gpt-3.5');
+    modelUsed = opt2.model;
+    outline = await callLLM(
+      [{ role: 'user', content: prompt }],
+      { ...opt2, title: 'Assignment Terminator', referer: process.env.NEXT_PUBLIC_APP_URL }
+    );
+  }
+
+  // --- 後處理流程：先正規化標題 → 行首整理 → 固定標題命名 → 加「（約 N 字）」 ---
+  outline = normalizeHeaders(outline, String(language || '中文'));
+
+  outline = outline
+    // 中文數字或羅馬/阿拉伯章節號 → 保留行首
+    .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDM]+\.)\s*/g, '$1$2 ')
+    // 子編號 A. B. C. 行首
+    .replace(/(^|\n)([A-Z])\.\s*/g, '$1$2. ')
+    // 合併多餘空行
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+
+  // 固定標題名稱（引言 / 主體段N / 結論）
+  outline = normalizeSectionTitles(outline, String(language || '中文'));
+
+  // 在標題後加入建議字數
+  outline = appendWordBudgets(outline, language, wc);
+
+  // 防守：避免超長
+  const finalOutline = outline.slice(0, 100_000);
+
+  // --- 落庫到 Outline ---
+  try {
+    const rec = await prisma.outline.create({
+      data: {
+        userId: session.user.id,
+        title: String(title).slice(0, 512),
+        content: finalOutline,
+      },
+      select: { id: true },
+    });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[outline:ok]', { outlineId: rec.id, modelUsed });
+    }
+    return res.status(200).json({ outline: finalOutline, outlineId: rec.id });
+  } catch (dbErr: any) {
+    console.error('[outline:db]', { err: String(dbErr?.message ?? dbErr) });
+    return res.status(500).json({ error: '資料庫錯誤，請稍後再試' });
+  }
+}
+
