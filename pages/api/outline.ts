@@ -8,6 +8,52 @@ type Ok   = { outline: string; outlineId: string };
 type Err  = { error: string };
 type ResBody = Ok | Err;
 
+/** 將 1..20 轉中文數字（章節用） */
+function toZhNum(n: number): string {
+  const base = ['零','一','二','三','四','五','六','七','八','九','十'];
+  if (n <= 10) return base[n];
+  if (n < 20) return '十' + base[n - 10];
+  if (n % 10 === 0) return base[Math.floor(n / 10)] + '十';
+  return base[Math.floor(n / 10)] + '十' + base[n % 10];
+}
+
+/** 將「— / – / • 標題」行正規化為章節標題（中文→一、；英文→1.）
+ * - 不會動到一般 "- 子彈點"
+ * - 已經是「一、 / 1. / I.」的標題會原樣保留
+ */
+function normalizeHeaders(text: string, language: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let sec = 0;
+
+  const okHeader = /^((?:[一二三四五六七八九十]+、)|(?:[IVXLCDM]+\. )|(?:\d+\. ))/;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { out.push(''); continue; }
+
+    // 原本就以 "- " 開頭的子彈，不變
+    if (/^- /.test(line)) { out.push(line); continue; }
+
+    // 已是可辨識標題，保留
+    if (okHeader.test(line + ' ')) { out.push(line); continue; }
+
+    // 「— / – / • 」開頭 → 升級為編號標題
+    const m = line.match(/^[—–•]\s*(.+)$/);
+    if (m && m[1]) {
+      sec += 1;
+      const title = m[1].trim();
+      const isZH = /中|中文|zh/i.test(language);
+      out.push(isZH ? `${toZhNum(sec)}、 ${title}` : `${sec}. ${title}`);
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  return out.join('\n');
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResBody>,
@@ -44,7 +90,7 @@ export default async function handler(
     return res.status(400).json({ error: '缺少必要字段' });
   }
 
-  // —— 你的提示詞（保留你的二級要點規則，另外加上「> 說明：」行，供學生閱讀、不影響文獻抓取）——
+  // —— 你的提示詞（保留你的二級要點規則 + 每節最後 > 說明）——
   const prompt = `
 請產生「段落式大綱」，**務必**照以下規則：
 1. 中文用「一、二、三…」，英文用「1. 2. 3.…」編號。
@@ -112,7 +158,9 @@ export default async function handler(
     );
   }
 
-  // --- 後處理：強制換行（只在行首斷節，避免誤切「AI」等詞） ---
+  // --- 後處理流程：先正規化標題 → 再做你的行首整理 → 最後加「（約 N 字）」 ---
+  outline = normalizeHeaders(outline, String(language || '中文'));
+
   outline = outline
     // 中文數字或羅馬/阿拉伯章節號 → 保留行首
     .replace(/(^|\n)([一二三四五六七八九十]+[、]|[IVXLCDM]+\.)\s*/g, '$1$2 ')
@@ -122,7 +170,6 @@ export default async function handler(
     .replace(/\n{2,}/g, '\n')
     .trim();
 
-  // --- 在每個章節標題後面加上「建議字數」 ---
   outline = appendWordBudgets(outline, language, wc);
 
   // 防守：避免超長
@@ -175,8 +222,9 @@ function appendWordBudgets(raw: string, language: string, total: number) {
 
   if (headers.length === 0) return raw;
 
-  // 判斷 Intro / Conclusion（若沒寫明，預設第一個/最後一個）
   const isZH = /中|中文|zh/i.test(language);
+
+  // 找出 intro / conclusion（若沒寫明，預設第一個 / 最後一個）
   const introIdx =
     headers.find(h => /引言|前言|introduction/i.test(h.title))?.idx ?? headers[0].idx;
   const conclusionIdx =
