@@ -71,7 +71,7 @@ export function formatCitationAPA7(r: Citation) {
         ? r.publishedAt.slice(0, 4)
         : String((r.publishedAt as Date).getFullYear()))
     : "n.d.";
-  
+
   const authors = r.authors ? r.authors + ". " : "";
   const title = r.title ? `${r.title}.` : "";
   const source = r.source ? ` ${r.source}.` : "";
@@ -80,10 +80,8 @@ export function formatCitationAPA7(r: Citation) {
     : r.url
     ? ` ${r.url}`
     : "";
-  
-  return `${authors}(${year}). ${r.title ? `${r.title}.` : ""}${source}${tail}`
-    .replace(/\s+/g, " ")
-    .trim();
+
+  return `${authors}(${year}). ${title}${source}${tail}`.replace(/\s+/g, " ").trim();
 }
 
 
@@ -96,7 +94,7 @@ function parseOutlineToSections(outline: string): OutlineSection[] {
   const sections: OutlineSection[] = [];
 
   // 支援：中文一、二…；阿拉伯 1.；羅馬 I. V. …（大小寫）
-  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:\d+\.)|(?:[IVXLCDMivxlcdm]+\.) )\s*(.+)$/;
+  const headerRe = /^((?:[一二三四五六七八九十]+、)|(?:\d+\.)|(?:[IVXLCDMivxlcdm]+\.))\s*(.+)$/;
 
   let current: OutlineSection | null = null;
 
@@ -154,22 +152,24 @@ export default function EasyWorkUI() {
     bodyTitles: ["", "", ""],
   });
 
-  // 當 wordCount 改變 → 自動按比例分配一次
+  // 當總字數或主體段數改變 → 自動按比例分配
   useEffect(() => {
     const total = parseInt(form.wordCount || "0", 10) || 0;
     if (!total || plan.bodyCount <= 0) return;
-    const intro = Math.max(50, Math.round(total * 0.14 / 10) * 10);
-    const concl = Math.max(50, Math.round(total * 0.14 / 10) * 10);
+
+    const intro = Math.max(50, Math.round((total * 0.14) / 10) * 10);
+    const concl = Math.max(50, Math.round((total * 0.14) / 10) * 10);
     const remain = Math.max(0, total - intro - concl);
     const per = Math.max(50, Math.round(remain / plan.bodyCount / 10) * 10);
+
     setPlan((p) => ({
       ...p,
       intro,
       conclusion: concl,
       body: Array.from({ length: p.bodyCount }, () => per),
+      bodyTitles: Array.from({ length: p.bodyCount }, (_, i) => p.bodyTitles?.[i] ?? ""),
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.wordCount]);
+  }, [form.wordCount, plan.bodyCount]);
 
   /* ----------- 結果 / 其他 state ----------- */
   const [results, setResults] = useState<Record<string, string>>({});
@@ -235,7 +235,7 @@ export default function EasyWorkUI() {
         "";
 
       if (step === "outline" && data.outlineId) {
-        console.log("✅ outlineId 設定成功", data.outlineId); 
+        console.log("✅ outlineId 設定成功", data.outlineId);
         setOutlineId(data.outlineId);
         setReferences([]);
       }
@@ -282,7 +282,7 @@ export default function EasyWorkUI() {
           {" ｜ 目前剩餘 "}
           <span className="font-bold text-blue-600">{credits}</span> 點
         </div>
-        
+
         <Button
           variant="ghost"
           className="text-red-600 hover:text-black px-2 py-1"
@@ -364,7 +364,7 @@ export default function EasyWorkUI() {
             onClick={() =>
               callStep("outline", "/api/outline", {
                 ...form,
-                paragraphPlan: plan, // ✅ 送到後端
+                paragraphPlan: plan, // ✅ 前端送到後端
               })
             }
           />
@@ -637,10 +637,28 @@ function OutlineViewerWithRefs({
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean);
+
+    // 1) 優先：明確的子彈點
     const bullets = lines
-      .filter((l) => /^[-•]/.test(l))
-      .map((l) => l.replace(/^[-•]\s*/, ""));
-    return bullets.length ? bullets : [text.trim()];
+      .filter((l) => /^[-•]\s+/.test(l))
+      .map((l) => l.replace(/^[-•]\s+/, ""));
+
+    if (bullets.length) return bullets;
+
+    // 2) 後備：排除「> 說明」與佔位字
+    const fallback = lines.filter(
+      (l) =>
+        !/^> 說明：/.test(l) &&
+        !/^[（(]\s*請補充要點/.test(l) &&
+        !/^[（(]\s*總結與展望/.test(l)
+    );
+
+    return fallback.length ? fallback : [];
+  };
+
+  const renderHeader = (sec: OutlineSection) => {
+    const isZh = /^[一二三四五六七八九十]+$/.test(sec.key);
+    return isZh ? `${sec.key}、 ${sec.title}` : `${sec.key}. ${sec.title}`;
   };
 
   return (
@@ -648,7 +666,7 @@ function OutlineViewerWithRefs({
       {sections.map((sec) => (
         <div key={sec.key} className="mb-4">
           <div className="font-semibold mb-1">
-            {sec.key}. {sec.title}
+            {renderHeader(sec)}
           </div>
           <ul className="space-y-1">
             {bulletsOf(sec.text).map((b, i) => (
