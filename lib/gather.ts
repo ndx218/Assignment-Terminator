@@ -1,7 +1,13 @@
 /* lib/gather.ts — Enhanced Scholarly Reference Harvester (AI-topic locked) */
 import { callLLM } from '@/lib/ai';
 
-export type SourceKind = 'crossref' | 'semanticscholar' | 'arxiv' | 'pubmed' | 'openalex' | 'wiki';
+export type SourceKind =
+  | 'crossref'
+  | 'semanticscholar'
+  | 'arxiv'
+  | 'pubmed'
+  | 'openalex'
+  | 'wiki';
 
 export type RefItem = {
   sectionKey: string;
@@ -23,7 +29,7 @@ export type GatherOpts = {
   sources?: SourceKind[];
   enableLLMQueryExpand?: boolean;
   enableLLMRerank?: boolean;
-  /** 新增：若為 true，硬性過濾到 AI 領域 */
+  /** 若為 true，硬性過濾到 AI 領域 */
   aiTopicLock?: boolean;
 };
 
@@ -32,11 +38,25 @@ const OPENALEX = process.env.OPENALEX_ENABLE === '1';
 const ENABLE_LLM_EXPAND = process.env.REF_LLM_EXPAND === '1';
 const ENABLE_LLM_RERANK = process.env.REF_LLM_RERANK === '1';
 
-// 會被強化的 AI 關鍵詞（用於查詢擴展、關聯加權）
+// AI 關鍵詞
 const AI_TOKENS = [
-  'artificial intelligence','ai','machine learning','ml','deep learning','neural network',
-  'transformer','large language model','llm','bert','gpt','diffusion','reinforcement learning',
-  'computer vision','nlp','generative','foundation model'
+  'artificial intelligence',
+  'ai',
+  'machine learning',
+  'ml',
+  'deep learning',
+  'neural network',
+  'transformer',
+  'large language model',
+  'llm',
+  'bert',
+  'gpt',
+  'diffusion',
+  'reinforcement learning',
+  'computer vision',
+  'nlp',
+  'generative',
+  'foundation model',
 ];
 
 export async function gatherForSection(
@@ -49,26 +69,39 @@ export async function gatherForSection(
     ? opts.sources
     : (['crossref', 'semanticscholar', 'arxiv', 'pubmed'] as SourceKind[]);
 
-  const line = outline.split('\n').find(l => l.trim().startsWith(sectionKey));
-  const hint = line ? line.replace(/^[IVX一二三四五六七八九十\.\)\s-]+/, '').slice(0, 160) : '';
+  const line = outline.split('\n').find((l) => l.trim().startsWith(sectionKey));
+  const hint = line
+    ? line.replace(/^[IVX一二三四五六七八九十\.\)\s-]+/, '').slice(0, 160)
+    : '';
   const base = `${paperTitle} ${sectionKey} ${hint}`.trim();
 
-  const queries = await expandQueries(base, ENABLE_LLM_EXPAND || !!opts.enableLLMQueryExpand, opts.aiTopicLock);
+  const queries = await expandQueries(
+    base,
+    ENABLE_LLM_EXPAND || !!opts.enableLLMQueryExpand,
+    opts.aiTopicLock
+  );
 
   const raw: RefItem[] = [];
-  const perQueryNeed = Math.max(2, Math.ceil((opts.need || 5) / Math.max(1, queries.length)));
+  const perQueryNeed = Math.max(
+    2,
+    Math.ceil((opts.need || 5) / Math.max(1, queries.length))
+  );
 
   for (const q of queries) {
     const tasks: Promise<RefItem[]>[] = [];
     for (const kind of sources) {
       if (kind === 'crossref') tasks.push(fetchCrossref(q, perQueryNeed));
-      else if (kind === 'semanticscholar') tasks.push(fetchSemanticScholar(q, perQueryNeed));
+      else if (kind === 'semanticscholar')
+        tasks.push(fetchSemanticScholar(q, perQueryNeed));
       else if (kind === 'arxiv') tasks.push(fetchArxiv(q, perQueryNeed));
       else if (kind === 'pubmed') tasks.push(fetchPubMed(q, perQueryNeed));
-      else if (kind === 'openalex' && OPENALEX) tasks.push(fetchOpenAlex(q, perQueryNeed));
+      else if (kind === 'openalex' && OPENALEX)
+        tasks.push(fetchOpenAlex(q, perQueryNeed));
     }
     const chunk = await Promise.allSettled(tasks);
-    chunk.forEach(r => { if (r.status === 'fulfilled') raw.push(...r.value); });
+    chunk.forEach((r) => {
+      if (r.status === 'fulfilled') raw.push(...r.value);
+    });
   }
 
   // 1) 去重
@@ -79,18 +112,30 @@ export async function gatherForSection(
     items = items.filter(isClearlyAI);
   }
 
-  // 3) 打分：關聯（關鍵詞 + LLM）、可信度、時間
-  const context = buildContextForRelevance(paperTitle, hint, opts.aiTopicLock);
-  const scored = await scoreAndSort(items, context, ENABLE_LLM_RERANK || !!opts.enableLLMRerank, opts.aiTopicLock);
+  // 3) 打分
+  const context = buildContextForRelevance(
+    paperTitle,
+    hint,
+    opts.aiTopicLock
+  );
+  const scored = await scoreAndSort(
+    items,
+    context,
+    ENABLE_LLM_RERANK || !!opts.enableLLMRerank,
+    opts.aiTopicLock
+  );
 
   return scored.slice(0, opts.need || 5).map(stripInternal);
 }
 
 /* -------------------- Query Expansion -------------------- */
-async function expandQueries(seed: string, useLLM: boolean, aiLock?: boolean): Promise<string[]> {
+async function expandQueries(
+  seed: string,
+  useLLM: boolean,
+  aiLock?: boolean
+): Promise<string[]> {
   const base = seed.replace(/\s+/g, ' ').trim();
 
-  // 基本：把 AI 同義詞硬加進查詢，保證檢索焦點
   const enforced = aiLock
     ? uniqStrings([
         base,
@@ -109,7 +154,8 @@ Topic: ${base}
 ${aiLock ? `The topic MUST be about Artificial Intelligence / ML. Always include at least one AI term.` : ''}
 Return ONLY a JSON array of strings.`;
     const raw = await callLLM([{ role: 'user', content: prompt }], {
-      model: process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
+      model:
+        process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
       temperature: 0.2,
       timeoutMs: 15000,
     });
@@ -120,7 +166,6 @@ Return ONLY a JSON array of strings.`;
   }
 }
 
-/* -------------------- Fetchers (原樣，略) -------------------- */
 /* -------------------- Fetchers -------------------- */
 async function fetchCrossref(query: string, limit: number): Promise<RefItem[]> {
   try {
@@ -145,9 +190,7 @@ async function fetchCrossref(query: string, limit: number): Promise<RefItem[]> {
       credibility: 88,
       _kind: 'crossref',
     })).filter(v => v.title && v.url);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchSemanticScholar(query: string, limit: number): Promise<RefItem[]> {
@@ -173,9 +216,7 @@ async function fetchSemanticScholar(query: string, limit: number): Promise<RefIt
       credibility: 82,
       _kind: 'semanticscholar',
     })).filter(v => v.title && v.url);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchArxiv(query: string, limit: number): Promise<RefItem[]> {
@@ -187,9 +228,7 @@ async function fetchArxiv(query: string, limit: number): Promise<RefItem[]> {
     const r = await fetch(u.toString(), { headers: { 'User-Agent': ua() } });
     const xml = await r.text();
     return parseArxiv(xml);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function parseArxiv(xml: string): RefItem[] {
@@ -267,9 +306,7 @@ async function fetchPubMed(query: string, limit: number): Promise<RefItem[]> {
         });
     });
     return out;
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 async function fetchOpenAlex(query: string, limit: number): Promise<RefItem[]> {
@@ -296,42 +333,84 @@ async function fetchOpenAlex(query: string, limit: number): Promise<RefItem[]> {
       credibility: 80,
       _kind: 'openalex',
     })).filter(v => v.title && v.url);
-  } catch {
-    return [];
+  } catch { return []; }
+}
+
+/* -------------------- Relevance / Scoring -------------------- */
+async function scoreAndSort(
+  items: RefItem[],
+  context: string,
+  useLLM: boolean,
+  aiLock?: boolean
+): Promise<RefItem[]> {
+  const nowYear = new Date().getFullYear();
+  const relBase = items.map((it) => ({
+    it,
+    rel: relevanceKeyword(context, it, aiLock),
+  }));
+
+  let llmScores: Map<string, number> | null = null;
+  if (useLLM && relBase.length) {
+    const top = relBase
+      .sort((a, b) => b.rel - a.rel)
+      .slice(0, 20)
+      .map((r) => r.it);
+    llmScores = await llmRelevance(context, top, aiLock);
   }
+
+  const scored = items.map((it) => {
+    const relKW = relevanceKeyword(context, it, aiLock);
+    const relLLM = llmScores?.get(sig(it)) ?? relKW;
+    const cred = credibilityBase(it);
+    const rec = recencyScore(it, nowYear);
+    const score = (aiLock ? 0.65 : 0.5) * relLLM + 0.25 * cred + 0.1 * rec;
+    return { ...it, credibility: Math.round(cred), _score: score } as RefItem;
+  });
+
+  scored.sort((a, b) => (b._score ?? 0) - (a._score ?? 0));
+  return scored;
 }
 
-/* -------------------- Utilities used by fetchers -------------------- */
-function ua() {
-  const site = process.env.NEXT_PUBLIC_APP_URL || 'https://assignment-terminator.example';
-  return `AssignmentTerminator (+${site})`;
+function relevanceKeyword(
+  context: string,
+  it: RefItem,
+  aiLock?: boolean
+): number {
+  const text = `${it.title} ${it.source ?? ''} ${it.summary ?? ''}`.toLowerCase();
+  const ctxTokens = tokenSet(context);
+  const txtTokens = tokenSet(text);
+  const inter = [...ctxTokens].filter((t) => txtTokens.has(t)).length;
+  let score =
+    (inter / Math.sqrt(ctxTokens.size * txtTokens.size || 1)) * 100;
+
+  if (aiLock) {
+    const hits = AI_TOKENS.filter((t) => text.includes(t)).length;
+    score += Math.min(30, hits * 6);
+  }
+  return Math.max(0, Math.min(100, score));
 }
 
-function yearToDate(y?: number): string | null {
-  if (!y) return null;
-  const n = Number(y);
-  if (!n) return null;
-  return `${n}-01-01`;
-}
-
-function grab(xml: string, tag: string): string {
-  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
-  return m ? m[1] : '';
-}
-
-function unescapeXml(s?: string | null): string {
-  if (!s) return '';
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function flattenInverted(inv: Record<string, number[]>): string {
-  const max = Math.max(0, ...Object.values(inv).flat());
-  const arr: string[] = new Array(max + 1).fill('');
-  for (const [w, idxs] of Object.entries(inv)) idxs.forEach(i => (arr[i] = w));
-  return arr.join(' ').trim();
-}
+async function llmRelevance(
+  context: string,
+  items: RefItem[],
+  aiLock?: boolean
+): Promise<Map<string, number>> {
+  try {
+    const payload = items.map((it, i) => ({
+      id: i + 1,
+      title: it.title,
+      abstract: it.summary || '',
+      venue: it.source || '',
+    }));
+    const prompt =
+      `Rate relevance (0-100) of each candidate to the topic below.\n` +
+      `${aiLock ? 'Reject or heavily downscore items not clearly about AI/ML.' : ''}\n` +
+      `Topic:\n${context}\n\nReturn ONLY a JSON object {id: score}.\nCandidates:\n` +
+      JSON.stringify(payload, null, 2);
+    const raw = await callLLM([{ role: 'user', content: prompt }], {
+      model:
+        process.env.OPENROUTER_GPT35_MODEL ?? 'openai/gpt-3.5-turbo',
+      temperature: 0,
+      timeoutMs: 20000,
+    });
+    const obj = JSON.parse((raw || '{}').
