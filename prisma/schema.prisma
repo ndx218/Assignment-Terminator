@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -9,22 +7,18 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 定义用户角色枚举
 enum UserRole {
-  USER  // 普通用户
-  ADMIN // 管理员
+  USER
+  ADMIN
 }
 
-// NextAuth.js User Model
-// 包含 NextAuth.js 适配器期望的字段，以及您的自定义字段
 model User {
   id            String    @id @default(cuid())
   name          String?
   email         String?   @unique
-  emailVerified DateTime? // NextAuth.js requires this for email verification flows
-  image         String?   // NextAuth.js uses this for user avatars/profile pictures
+  emailVerified DateTime?
+  image         String?
 
-  // Your custom fields
   phone         String?   @unique
   credits       Int       @default(0)
   referredBy    String?
@@ -32,23 +26,18 @@ model User {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  role          UserRole  @default(USER) // 默认 USER
+  role          UserRole  @default(USER)
 
-  // NextAuth.js relations
   accounts      Account[]
   sessions      Session[]
-
-  // Your custom relations
   referralsMade Referral[]  @relation("Referrer")
   referralsGot  Referral[]  @relation("Referee")
   transactions  Transaction[]
 
-  // ✅ 新增：與 Outline / Reference 的反向關聯（修正 P1012 必要）
   outlines      Outline[]
   references    Reference[]
 }
 
-// NextAuth.js Account Model
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -68,7 +57,6 @@ model Account {
   @@unique([provider, providerAccountId])
 }
 
-// NextAuth.js Session Model
 model Session {
   id           String    @id @default(cuid())
   sessionToken String    @unique
@@ -77,7 +65,6 @@ model Session {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// NextAuth.js Verification Token Model
 model VerificationToken {
   identifier String
   token      String    @unique
@@ -86,9 +73,6 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// 自定义模型
-
-// 手机验证码模型
 model VerificationCode {
   phone     String   @id
   code      String
@@ -114,14 +98,9 @@ model Transaction {
   isFirstTopUp    Boolean  @default(false)
   createdAt       DateTime @default(now())
 
-  // 字串類型，避免 enum 變更帶來的風險
-  type            String   @default("GENERIC") // "TOPUP", "ADMIN_TOPUP", "USAGE", "REFERRAL_BONUS" ...
+  type            String   @default("GENERIC")
   description     String?
-
-  // 執行人（多半是管理員 userId 或 email）
   performedBy     String?
-
-  // 冪等鍵，避免重複加點
   idempotencyKey  String?  @unique
 
   @@index([userId, createdAt])
@@ -136,13 +115,12 @@ model TopUpSubmission {
   createdAt    DateTime  @default(now())
 }
 
-// === 新增：文章大綱（與 References 關聯） ===
 model Outline {
   id         String     @id @default(cuid())
   userId     String
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   title      String
-  content    String     @db.Text         // 大綱全文（可能較長）
+  content    String     @db.Text
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -151,7 +129,6 @@ model Outline {
   @@index([userId, createdAt])
 }
 
-// === 新增：參考文獻 ===
 model Reference {
   id          String     @id @default(cuid())
   userId      String
@@ -160,21 +137,26 @@ model Reference {
   outlineId   String
   outline     Outline    @relation(fields: [outlineId], references: [id], onDelete: Cascade)
 
-  sectionKey  String                     // 對應大綱段落（如 "I", "II.A" 或自定義 key）
+  sectionKey  String
   title       String
   url         String
-  doi         String?    @unique         // 單一 DOI 唯一；多筆 NULL 允許（PostgreSQL）
-  source      String?                     // 期刊/機構/站名，如 "Nature"、"NIST"、"Wikipedia"
-  authors     String?                     // "Alan Turing; John McCarthy"
+  doi         String?
+  source      String?
+  authors     String?
   publishedAt DateTime?
-  type        String     @default("OTHER")// JOURNAL|BOOK|REPORT|WIKI|NEWS|OTHER（先用字串）
-  summary     String?     @db.Text        // 短摘要（可選）
-  credibility Int        @default(0)      // 0~100 粗略可信度
+  type        String     @default("OTHER")
+  summary     String?     @db.Text
+  credibility Int        @default(0)
+
+  // 🔹 新增：AI 幫生成的引用說明（JSON）
+  explain     String?     @db.Text
 
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@index([userId, outlineId, sectionKey])
   @@index([type, credibility])
-  @@unique([outlineId, url])             // 同一大綱避免重複存同一 URL
+  @@index([doi])
+  @@unique([outlineId, url])
+  @@unique([outlineId, doi])
 }
